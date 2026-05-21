@@ -6,7 +6,6 @@
 Name "Magisor"
 OutFile "Magisor Setup 1.0.exe"
 InstallDir "C:\Program Files\Magisor"
-InstallDirRegKey HKLM "Software\Magisor" "Install_Dir"
 
 RequestExecutionLevel admin
 
