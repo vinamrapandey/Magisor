@@ -13,6 +13,7 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 import config
+import env_manager
 
 # Configure logger
 logger = logging.getLogger("magisor.tray")
@@ -35,7 +36,8 @@ class KeyVerificationWorker(QThread):
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.api_key.strip())
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model_name = env_manager.get_env("GEMINI_MODEL", fallback="gemini-2.0-flash")
+            model = genai.GenerativeModel(model_name)
             response = model.generate_content("Ping")
             if response.text:
                 self.finished.emit(True, "API Key verified successfully!")
