@@ -80,7 +80,8 @@ class MagisorAppController(QObject):
         self.tray_icon = SystemTrayIcon(
             icon_path=icon_path,
             on_settings_clicked=self.show_settings,
-            on_exit_clicked=self.exit_app
+            on_exit_clicked=self.exit_app,
+            on_test_capture_clicked=self.on_test_capture_clicked
         )
         self.tray_icon.show()
         
@@ -163,6 +164,15 @@ class MagisorAppController(QObject):
         logger.info("Launching Settings Dialog from Tray context...")
         wizard = OnboardingWizard()
         wizard.exec_()
+        
+    def on_test_capture_clicked(self) -> None:
+        """Invoked from system tray context menu to test capture and overlay."""
+        from PyQt5.QtGui import QCursor
+        cursor_pos = QCursor.pos()
+        x = cursor_pos.x()
+        y = cursor_pos.y()
+        logger.info("Test Capture triggered via system tray at: (%d, %d)", x, y)
+        self._handle_shake_on_gui_thread(x, y)
         
     def exit_app(self) -> None:
         """Enforces clean teardown stopping background loops, listeners, and widgets."""
