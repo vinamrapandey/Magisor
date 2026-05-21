@@ -41,6 +41,15 @@ To run Magisor, you need your own Google Gemini API Key. The app is designed to 
 
 ---
 
+## 📝 Environment Variables
+
+You can configure optional system behaviors via a local `.env` file in the root directory:
+- `MAGISOR_ENV`: Active run environment (e.g., `development`, `production`).
+- `LOG_LEVEL`: System logging verbosity (e.g., `INFO`, `DEBUG`).
+- `GEMINI_MODEL`: Sets the Google Gemini model used for context analysis (defaults to `gemini-2.0-flash`). This value can be modified here if Google releases newer models or deprecates older versions.
+
+---
+
 ## 📦 Project Structure
 ```text
 /magisor

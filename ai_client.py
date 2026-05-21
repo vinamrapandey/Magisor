@@ -65,8 +65,9 @@ def analyze_screen(
             "Keep responses concise. Format as JSON with keys: summary, actions, text."
         )
         
+        model_name = env_manager.get_env("GEMINI_MODEL", fallback="gemini-2.0-flash")
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name=model_name,
             system_instruction=system_instruction
         )
         
@@ -96,7 +97,7 @@ def analyze_screen(
         prompt_parts.append(image_part)
         
         # Request generation enforcing structured JSON output schema
-        logger.info("Sending content analysis request to Gemini API (gemini-1.5-flash)...")
+        logger.info("Sending content analysis request to Gemini API (%s)...", model_name)
         generation_config = {
             "response_mime_type": "application/json"
         }
@@ -202,7 +203,8 @@ class GeminiVisionClient:
         """
         try:
             genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model_name = env_manager.get_env("GEMINI_MODEL", fallback="gemini-2.0-flash")
+            model = genai.GenerativeModel(model_name)
             
             # Format history context
             formatted_history = []
