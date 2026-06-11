@@ -56,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final region = captureService.regionAroundPoint(center, screenSize);
       final imageBytes = await captureService.captureRegion(region);
       
-      final base64Img = captureService.toBase64Jpeg(imageBytes);
+      final base64Img = captureService.toBase64Jpeg(imageBytes, region.width.toInt(), region.height.toInt());
       
       final prompt = "Action requested: $action. Analyze the provided screen capture and provide a JSON response following the system prompt.";
       final response = await aiProvider.analyzeScreen(base64Img, prompt);

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
-import '../../core/services/auth_service.dart';
-import '../theme/app_colors.dart';
-import '../widgets/glass_card.dart';
+import '../../../core/services/auth_service.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/glass_card.dart';
 import 'auth_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -44,15 +44,6 @@ class WelcomeScreen extends StatelessWidget {
                   width: 300,
                   child: Column(
                     children: [
-                      _buildAuthButton(
-                        icon: Icons.g_mobiledata,
-                        label: 'Continue with Google',
-                        onTap: () async {
-                          final auth = context.read<AuthService>();
-                          await auth.signInWithGoogle();
-                        },
-                      ),
-                      const SizedBox(height: 16),
                       _buildAuthButton(
                         icon: Icons.email,
                         label: 'Email and Password',

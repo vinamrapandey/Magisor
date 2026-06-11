@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../theme/app_colors.dart';
-import '../widgets/glass_card.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/glass_card.dart';
 
 class ProviderSetupScreen extends StatefulWidget {
   const ProviderSetupScreen({super.key});

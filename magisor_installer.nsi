@@ -39,8 +39,9 @@ RequestExecutionLevel admin
 Section "Install"
   SetOutPath "$INSTDIR"
   
-  ; Copy all compiled binaries from PyInstaller dist/Magisor folder recursively
-  File /r "dist\Magisor\*.*"
+  ; Copy all compiled binaries from Flutter build folder recursively
+  File /r "magisor_flutter\build\windows\x64\runner\Release\*.*"
+  Rename "$INSTDIR\magisor_flutter.exe" "$INSTDIR\Magisor.exe"
   
   ; Write uninstaller binary
   WriteUninstaller "$INSTDIR\uninstall.exe"

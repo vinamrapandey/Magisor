@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:image/image.dart' as img;
 
 class CaptureService {
   static const MethodChannel _channel = MethodChannel('magisor/capture');
@@ -9,10 +10,10 @@ class CaptureService {
   Future<Uint8List> captureRegion(Rect region) async {
     try {
       final result = await _channel.invokeMethod('captureRegion', {
-        'x': region.left,
-        'y': region.top,
-        'width': region.width,
-        'height': region.height,
+        'x': region.left.toInt(),
+        'y': region.top.toInt(),
+        'width': region.width.toInt(),
+        'height': region.height.toInt(),
       });
       return result as Uint8List;
     } catch (e) {
@@ -31,10 +32,17 @@ class CaptureService {
     }
   }
 
-  String toBase64Jpeg(Uint8List pngBytes) {
-    if (pngBytes.isEmpty) return '';
-    // Converting PNG raw bytes to Base64 to be sent to Gemini API
-    return base64Encode(pngBytes);
+  String toBase64Jpeg(Uint8List bgraBytes, int width, int height) {
+    if (bgraBytes.isEmpty) return '';
+    // Native C++ code returns raw BGRA bytes using BitBlt and GetDIBits
+    final image = img.Image.fromBytes(
+      width: width, 
+      height: height, 
+      bytes: bgraBytes.buffer, 
+      order: img.ChannelOrder.bgra
+    );
+    final jpegBytes = img.encodeJpg(image, quality: 80);
+    return base64Encode(jpegBytes);
   }
 
   Rect regionAroundPoint(Offset center, Size screenSize) {

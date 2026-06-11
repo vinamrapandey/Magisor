@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/glass_card.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/glass_card.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
