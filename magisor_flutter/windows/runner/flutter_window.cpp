@@ -13,15 +13,11 @@ static HHOOK g_mouseHook = NULL;
 static FlutterWindow* g_flutterWindow = nullptr;
 static int g_sensitivity = 1; // 0=low, 1=medium, 2=high
 
-struct MousePoint {
-    int x;
-    int y;
-    long long timestamp_ms;
-};
-static std::vector<MousePoint> g_points;
+static int g_anchorX = -1;
 static int g_lastDirection = 0;
 static int g_reversals = 0;
 static long long g_lastTriggerTime = 0;
+static long long g_lastEventTime = 0;
 
 static long long GetTimeMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -33,44 +29,54 @@ static LRESULT CALLBACK MouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
     if (nCode >= 0 && wParam == WM_MOUSEMOVE) {
         MSLLHOOKSTRUCT* hookStruct = (MSLLHOOKSTRUCT*)lParam;
         int x = hookStruct->pt.x;
-        int y = hookStruct->pt.y;
         long long now = GetTimeMs();
 
         if (g_lastTriggerTime != 0 && (now - g_lastTriggerTime) < 1500) {
-            g_points.clear();
+            // Cooldown period
+            g_anchorX = -1;
             g_reversals = 0;
         } else {
-            g_points.push_back({x, y, now});
-            
-            while (!g_points.empty() && (now - g_points.front().timestamp_ms) > 400) {
-                g_points.erase(g_points.begin());
+            // Reset if no significant movement for 300ms
+            if (now - g_lastEventTime > 300) {
+                g_anchorX = x;
+                g_reversals = 0;
+                g_lastDirection = 0;
             }
+            g_lastEventTime = now;
 
-            if (g_points.size() >= 2) {
-                int requiredReversals = 3;
-                int minDistance = 20;
-                if (g_sensitivity == 0) { requiredReversals = 5; minDistance = 30; }
-                else if (g_sensitivity == 2) { requiredReversals = 2; minDistance = 15; }
-
-                auto& current = g_points.back();
-                auto& previous = g_points[g_points.size() - 2];
-                int dx = current.x - previous.x;
+            if (g_anchorX == -1) {
+                g_anchorX = x;
+            } else {
+                int dx = x - g_anchorX;
+                
+                int minDistance = 50; 
+                if (g_sensitivity == 0) minDistance = 100;
+                else if (g_sensitivity == 2) minDistance = 25;
 
                 if (std::abs(dx) > minDistance) {
                     int newDirection = dx > 0 ? 1 : -1;
+                    
                     if (g_lastDirection != 0 && newDirection != g_lastDirection) {
                         g_reversals++;
+                    } else if (g_lastDirection == 0) {
+                        g_reversals = 1;
                     }
+                    
                     g_lastDirection = newDirection;
+                    g_anchorX = x; // Reset anchor
+
+                    int requiredReversals = 4;
+                    if (g_sensitivity == 0) requiredReversals = 5;
+                    else if (g_sensitivity == 2) requiredReversals = 3;
 
                     if (g_reversals >= requiredReversals) {
                         g_lastTriggerTime = now;
-                        g_points.clear();
                         g_reversals = 0;
                         g_lastDirection = 0;
+                        g_anchorX = -1;
 
                         if (g_flutterWindow) {
-                            g_flutterWindow->OnShakeDetected((double)x, (double)y);
+                            g_flutterWindow->OnShakeDetected((double)x, (double)hookStruct->pt.y);
                         }
                     }
                 }
