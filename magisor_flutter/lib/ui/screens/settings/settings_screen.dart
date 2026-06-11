@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
-import '../../core/services/shake_detector_service.dart';
+import '../../../core/services/shake_detector_service.dart';
 import '../onboarding/provider_setup_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
