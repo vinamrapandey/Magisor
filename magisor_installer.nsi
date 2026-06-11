@@ -37,6 +37,10 @@ RequestExecutionLevel admin
 !insertmacro MUI_LANGUAGE "English"
 
 Section "Install"
+  ; Forcefully kill any running instance of the app before trying to overwrite files
+  nsExec::ExecToLog 'taskkill /F /IM Magisor.exe'
+  Sleep 1000
+
   SetOutPath "$INSTDIR"
   
   ; Copy all compiled binaries from Flutter build folder recursively
