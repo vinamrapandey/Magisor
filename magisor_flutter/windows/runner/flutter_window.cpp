@@ -146,7 +146,7 @@ LRESULT FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 void FlutterWindow::StartMouseHook(int sensitivity) {
     g_sensitivity = sensitivity;
     if (g_mouseHook == NULL) {
-        g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, MouseHookCallback, NULL, 0);
+        g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, MouseHookCallback, GetModuleHandle(NULL), 0);
     }
 }
 

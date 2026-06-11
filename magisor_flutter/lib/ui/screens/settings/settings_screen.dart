@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../core/services/shake_detector_service.dart';
+import '../onboarding/provider_setup_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final shakeService = context.watch<ShakeDetectorService>();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings'), backgroundColor: Colors.transparent, iconTheme: const IconThemeData(color: AppColors.textPrimary)),
       body: ListView(
@@ -22,7 +27,7 @@ class SettingsScreen extends StatelessWidget {
                   title: const Text('Manage API Keys', style: TextStyle(color: AppColors.textPrimary)),
                   trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
                   onTap: () {
-                    // Navigate to ProviderSettingsScreen
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ProviderSetupScreen()));
                   },
                 ),
               ],
@@ -36,8 +41,12 @@ class SettingsScreen extends StatelessWidget {
                 const Text('Shake Sensitivity', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
                 Slider(
-                  value: 0.5,
-                  onChanged: (val) {},
+                  value: shakeService.sensitivity.index / 2.0,
+                  onChanged: (val) {
+                    int idx = (val * 2).round();
+                    context.read<ShakeDetectorService>().updateSensitivity(ShakeSensitivity.values[idx]);
+                  },
+                  divisions: 2,
                   activeColor: AppColors.accentViolet,
                   inactiveColor: AppColors.glassBorder,
                 ),
@@ -45,6 +54,7 @@ class SettingsScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Low', style: TextStyle(color: AppColors.textMuted)),
+                    Text('Medium', style: TextStyle(color: AppColors.textMuted)),
                     Text('High', style: TextStyle(color: AppColors.textMuted)),
                   ],
                 ),
