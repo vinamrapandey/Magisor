@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/models/saved_item.dart';
+import '../screens/entry_detail_screen.dart';
 import '../theme/app_colors.dart';
 import 'glass_card.dart';
 
@@ -30,12 +31,17 @@ class HistoryEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => EntryDetailScreen(item: item)),
+        ),
+        child: GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -94,6 +100,7 @@ class HistoryEntryCard extends StatelessWidget {
               ],
             ),
           ],
+        ),
         ),
       ),
     );
