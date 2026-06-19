@@ -6,7 +6,7 @@ import 'core/services/auth_service.dart';
 import 'core/services/shake_detector_service.dart';
 import 'core/services/capture_service.dart';
 import 'core/services/ocr_service.dart';
-import 'core/providers/gemini_provider.dart';
+import 'core/providers/provider_registry.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +24,7 @@ void main() async {
         Provider(create: (_) => ShakeDetectorService()..start()),
         Provider(create: (_) => CaptureService()),
         Provider(create: (_) => OcrService()),
-        Provider(create: (_) => GeminiProvider()),
+        ChangeNotifierProvider(create: (_) => ProviderRegistry()..load()),
       ],
       child: const MagisorApp(),
     ),
