@@ -7,11 +7,13 @@ import '../../core/models/magisor_response.dart';
 import '../../core/providers/provider_registry.dart';
 import '../../core/services/capture_service.dart';
 import '../../core/services/shake_detector_service.dart';
+import '../../core/services/storage_service.dart';
 import '../widgets/pie_menu.dart';
 import '../widgets/ai_result_overlay.dart';
 import '../widgets/ask_bar.dart';
 import 'settings/settings_screen.dart';
 import 'history_screen.dart';
+import 'saved_screen.dart';
 
 enum AppMode { dashboard, overlay }
 
@@ -163,6 +165,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     try {
       final captureService = context.read<CaptureService>();
       final aiProvider = context.read<ProviderRegistry>().active;
+      final storage = context.read<StorageService>();
 
       final screenSize = MediaQuery.of(context).size;
       // Capture the full screen as a single region (known dimensions).
@@ -175,6 +178,12 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       final response = await aiProvider.analyzeScreen(base64Img, question);
 
       setState(() => _result = response);
+      storage.addEntry(
+        query: question,
+        summary: response.summary,
+        extractedText: response.extractedText,
+        providerUsed: response.providerUsed,
+      );
     } catch (e) {
       setState(() {
         _result = MagisorResponse(
@@ -213,20 +222,27 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     try {
       final captureService = context.read<CaptureService>();
       final aiProvider = context.read<ProviderRegistry>().active;
-      
+      final storage = context.read<StorageService>();
+
       final screenSize = MediaQuery.of(context).size;
       final region = captureService.regionAroundPoint(center, screenSize);
-      
+
       // Capture from native C++ Hook
       final imageBytes = await captureService.captureRegion(region);
       final base64Img = captureService.toBase64Jpeg(imageBytes, region.width.toInt(), region.height.toInt());
-      
+
       final prompt = "Action requested: $action. Analyze the provided screen capture and provide a JSON response following the system prompt.";
       final response = await aiProvider.analyzeScreen(base64Img, prompt);
-      
+
       setState(() {
         _result = response;
       });
+      storage.addEntry(
+        query: action,
+        summary: response.summary,
+        extractedText: response.extractedText,
+        providerUsed: response.providerUsed,
+      );
     } catch (e) {
       setState(() {
         _result = MagisorResponse(
@@ -267,11 +283,19 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
                 icon: Icon(Icons.history),
                 label: Text('History'),
               ),
+              NavigationRailDestination(
+                icon: Icon(Icons.bookmark_border),
+                label: Text('Saved'),
+              ),
             ],
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
-            child: _selectedTab == 0 ? const SettingsScreen() : const HistoryScreen(),
+            child: switch (_selectedTab) {
+              0 => const SettingsScreen(),
+              1 => const HistoryScreen(),
+              _ => const SavedScreen(),
+            },
           ),
         ],
       ),
