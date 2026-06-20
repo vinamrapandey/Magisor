@@ -4,6 +4,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:tray_manager/tray_manager.dart';
 
 import '../../core/models/magisor_response.dart';
+import '../../core/models/saved_item.dart';
 import '../../core/providers/provider_registry.dart';
 import '../../core/services/capture_service.dart';
 import '../../core/services/shake_detector_service.dart';
@@ -30,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   bool _isLoading = false;
   bool _isAsking = false;
   MagisorResponse? _result;
+  SavedItem? _currentEntry;
 
   int _selectedTab = 0;
 
@@ -137,6 +139,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _menuPosition = null;
       _isAsking = false;
       _result = null;
+      _currentEntry = null;
     });
     await windowManager.hide();
   }
@@ -147,7 +150,20 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _menuPosition = null;
       _isAsking = true;
       _result = null;
+      _currentEntry = null;
     });
+  }
+
+  /// Star/unstar the result currently shown in the overlay.
+  Future<void> _toggleCurrentSaved() async {
+    final entry = _currentEntry;
+    if (entry == null) return;
+    final storage = context.read<StorageService>();
+    await storage.toggleSaved(entry);
+    final updated = storage.history.where((e) => e.id == entry.id);
+    if (mounted) {
+      setState(() => _currentEntry = updated.isNotEmpty ? updated.first : entry);
+    }
   }
 
   /// Capture the whole screen and answer a free-form question about it.
@@ -157,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _menuPosition = null;
       _isLoading = true;
       _result = null;
+      _currentEntry = null;
     });
 
     // Let the input bar clear before grabbing the screen.
@@ -177,13 +194,16 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
       final response = await aiProvider.analyzeScreen(base64Img, question);
 
-      setState(() => _result = response);
-      storage.addEntry(
+      final entry = await storage.addEntry(
         query: question,
         summary: response.summary,
         extractedText: response.extractedText,
         providerUsed: response.providerUsed,
       );
+      setState(() {
+        _result = response;
+        _currentEntry = entry;
+      });
     } catch (e) {
       setState(() {
         _result = MagisorResponse(
@@ -214,6 +234,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _menuPosition = null;
       _isLoading = true;
       _result = null;
+      _currentEntry = null;
     });
 
     // Wait a tiny bit for UI to clear the menu
@@ -234,15 +255,16 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       final prompt = "Action requested: $action. Analyze the provided screen capture and provide a JSON response following the system prompt.";
       final response = await aiProvider.analyzeScreen(base64Img, prompt);
 
-      setState(() {
-        _result = response;
-      });
-      storage.addEntry(
+      final entry = await storage.addEntry(
         query: action,
         summary: response.summary,
         extractedText: response.extractedText,
         providerUsed: response.providerUsed,
       );
+      setState(() {
+        _result = response;
+        _currentEntry = entry;
+      });
     } catch (e) {
       setState(() {
         _result = MagisorResponse(
@@ -331,6 +353,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
               result: _result,
               onClose: _closeOverlay,
               onFollowUp: _handleAction,
+              isSaved: _currentEntry?.saved ?? false,
+              onToggleSaved: _currentEntry != null ? _toggleCurrentSaved : null,
             ),
         ],
       ),
