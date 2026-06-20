@@ -1,161 +1,122 @@
 # Magisor 🪄
 
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://www.microsoft.com/windows)
-[![UI Framework](https://img.shields.io/badge/UI-PyQt5-darkgreen.svg)](https://www.riverbankcomputing.com/software/pyqt/)
-[![AI Engine](https://img.shields.io/badge/AI%20Engine-Gemini%202.0%20Flash-orange.svg)](https://aistudio.google.com/)
+[![UI](https://img.shields.io/badge/UI-Flutter-02569B.svg)](https://flutter.dev/)
+[![AI](https://img.shields.io/badge/AI-Gemini%20%7C%20Claude%20%7C%20Groq-orange.svg)](#-api-keys)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Magisor is an AI-powered, context-aware cursor overlay utility for Windows. Running unobtrusively in the system tray, it monitors mouse gestures and invokes a stunning glassmorphic UI overlay at your cursor position when a "shake" gesture is detected or a hotkey is triggered. 
+Magisor is an invisible, AI‑powered companion for your desktop. It lives in the system tray and is summoned with a flick of the mouse — **shake the cursor** and a glassmorphic radial menu wraps around it, ready to summarize, explain, translate, or answer *"What's on my screen?"* using the AI provider of your choice.
 
-Behind the scenes, Magisor captures the visual context surrounding the cursor, queries Windows UI Automation to extract accessibility text under the pointer, and feeds this multimodal context to the Google Gemini Vision API. This allows you to instantly ask follow-up questions, run smart actions (like copying text, opening links, and writing files), and interact intelligently with any program on your screen.
+> **Note:** Magisor is mid‑migration from an original Python/PyQt5 prototype (still present in the repo root, now **legacy**) to a Flutter + native C++ desktop app under [`magisor_flutter/`](magisor_flutter). **The Flutter app is the live product** — build and run from that folder.
 
 ---
 
-## 🔮 System Architecture
+## ✨ Features
 
-```mermaid
-graph TD
-    A[Mouse Movement] -->|Low-Level Mouse Hook| B(Shake Detection Engine)
-    B -->|Trigger Event| C[Overlay Manager]
-    C -->|Coordinate Query| D(Fast Screen Capture - mss)
-    C -->|A11y Text Query| E(UI Automation - pywinauto)
-    D -->|Screen Grab PNG| F(Gemini API Client)
-    E -->|Extracted Text Context| F
-    F -->|Process Multimodal Context| G(PyQt5 Frameless UI)
-    G -->|User Input / Voice| F
-    G -->|Smart Actions| H[System Actions: Copy, Browse, Run]
+- **Shake to summon** — a native low‑level Win32 mouse hook detects a deliberate shake while filtering out normal movement. Sensitivity is adjustable and persisted.
+- **Glassmorphic radial menu** at the cursor — Summarize, Explain, Translate, Copy Text, and a free‑form **Ask**.
+- **"What's on my screen?"** — type any question; Magisor captures the screen and answers with a vision model.
+- **Multi‑provider AI** — Google **Gemini**, Anthropic **Claude**, and **Groq**. Switch providers, pick the **model per provider**, and verify keys in‑app.
+- **Local history & saved items** — every result is stored locally (SQLite). Browse, star, copy, open links, and view full details; clear history while keeping starred items.
+- **DPI‑ and multi‑monitor‑aware** screen capture.
+- **System tray** integration and a **launch‑at‑Windows‑startup** toggle.
+- **Local‑first & private** — API keys live in the OS secure store; history is a local SQLite file. Firebase (accounts / cloud sync) is **optional and off by default**.
+
+---
+
+## 🏗️ Architecture
+
+Flutter renders the entire UI in Dart. A thin native C++ layer in the Windows runner handles the two things Flutter can't do alone — a **global mouse hook** and **fast screen capture** — exposed to Dart over MethodChannels.
+
+```
+Mouse shake ──(C++ WH_MOUSE_LL hook)──▶ magisor/mouse_hook ──▶ ShakeDetectorService
+                                                                      │
+                                                          Radial menu / Ask bar
+                                                                      │
+Screen capture ◀──(C++ BitBlt)── magisor/capture ◀──────── CaptureService
+                                                                      │
+                                                  AI provider (Gemini / Claude / Groq)
+                                                                      │
+                                            Result overlay  +  local SQLite history
 ```
 
----
-
-## 🚀 Key Features
-
-* **Global Shake Gesture Detection:** Responsive gesture engine utilizing high-performance, low-level Win32 mouse hooks.
-* **Multimodal Context Merging:** Fuses dynamic screenshot bounding boxes with rich text extracted directly from the Windows Accessibility Tree (UI Automation).
-* **Gemini 2.0 Vision Integration:** Highly structured prompt tuning using Google's fastest vision models.
-* **Premium Glassmorphic UI:** A frameless PyQt5 interface with smooth layout transitions, localized animations, and voice support.
-* **Contextual Actions:** Automatically parses elements (e.g. URLs, code snippets, textual data) to execute copy-to-clipboard, launch browser, or run scripts.
-* **Privacy & Local Isolation:** All configurations and API keys are stored strictly locally in `%APPDATA%/Magisor/settings.json`. No external telemetry.
+| Layer | Tech |
+| :--- | :--- |
+| UI / state | Flutter, `provider` |
+| Native bridge | C++ in `windows/runner/` — mouse hook, screen capture, startup registry — via channels `magisor/mouse_hook`, `magisor/capture`, `magisor/system` |
+| AI | Direct HTTP to Gemini, Claude (Anthropic Messages API), Groq (OpenAI‑compatible) |
+| Storage | `sqflite_common_ffi` (history), `flutter_secure_storage` (keys/prefs), `path_provider` |
+| Shell | `window_manager`, `tray_manager` |
+| Optional | Firebase (auth + Firestore sync) — requires your own config |
 
 ---
 
-## ⚙️ Prerequisites & Get a Gemini API Key
+## 🚀 Getting started (development)
 
-Magisor runs entirely on your local machine and communicates directly with Google's API servers. You will need your own Google Gemini API key to run it.
+**Prerequisites**
 
-1. Navigate to the [Google AI Studio Console](https://aistudio.google.com/).
-2. Log in with your Google account.
-3. Click **Get API key** in the left sidebar, then click **Create API key**.
-4. Copy the generated key (it starts with `AIzaSy...`).
-5. Paste this key into Magisor's onboarding wizard upon first launch, or update it later via the **Settings** menu in the system tray.
+- Flutter SDK (3.x) and Dart 3.x
+- Visual Studio 2022 with the **Desktop development with C++** workload (needed to build the Windows runner)
 
----
+**Run**
 
-## 💻 Installation & Developer Setup
-
-### Running from Source
-
-1. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/vinamrapandey/Magisor.git
-   cd Magisor
-   ```
-
-2. **Create and Activate a Virtual Environment:**
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\activate
-   ```
-
-3. **Install Dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Launch the Application:**
-   ```bash
-   python main.py
-   ```
-
----
-
-## 📦 Project Structure
-
-```text
-/magisor
-  ├── main.py              # Main runner and application initialization
-  ├── mouse_hook.py        # Win32 low-level mouse hooks and gesture tracking
-  ├── capture.py           # Multi-monitor visual screen-grab manager (mss)
-  ├── ai_client.py         # Google Gemini API client wrapper
-  ├── overlay.py           # Borderless PyQt5 glassmorphic UI overlay
-  ├── onboarding.py        # First-launch configuration setup wizard
-  ├── tray.py              # System tray integration and context menu
-  ├── context_reader.py    # Windows UI Automation text-grabber (pywinauto)
-  ├── actions.py           # Context-specific action executor (copy, open link)
-  ├── config.py            # Local JSON settings manager (reads/writes settings.json)
-  ├── env_manager.py       # Local .env parser & validator
-  ├── requirements.txt     # Python module dependencies
-  ├── magisor_installer.nsi# NSIS script for compiling the Windows installer
-  └── assets/              # Icons, status GIFs, and user interface media
-```
-
----
-
-## ⚙️ Advanced Configuration
-
-You can configure system behavior and runtime environments using a `.env` file in the project root:
-
-| Environment Variable | Description | Default Value |
-| :--- | :--- | :--- |
-| `MAGISOR_ENV` | Running mode (`development` or `production`) | `production` |
-| `LOG_LEVEL` | Verbosity level for file logging (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
-| `GEMINI_MODEL` | The specific model identifier to query via API | `gemini-2.0-flash` |
-
-### Settings File Location
-User settings (such as the verified API key and launch options) are saved inside a JSON file:
-```text
-%APPDATA%\Magisor\settings.json
-```
-If you need to completely reset the application or clear your configuration, simply delete this directory.
-
----
-
-## 🛠️ Compilation & Packaging Guide
-
-Magisor is packaged into a single standalone executable and wrapped in an NSIS Installer for easy distribution.
-
-### 1. Build Executable with PyInstaller
-Ensure PyInstaller is installed (`pip install pyinstaller`), then run:
 ```bash
-pyinstaller Magisor.spec
+git clone https://github.com/vinamrapandey/Magisor.git
+cd Magisor/magisor_flutter
+flutter pub get
+flutter run -d windows
 ```
-This reads the specifications inside `Magisor.spec` and compiles the project into `dist/Magisor/Magisor.exe`, bundling all assets.
 
-### 2. Generate Windows Setup Installer
-Ensure [NSIS (Nullsoft Scriptable Install System)](https://nsis.sourceforge.io/) is installed and added to your system path. Compile the installer script by running:
-```powershell
-makensis magisor_installer.nsi
+On first run: open **Settings → Manage API Keys**, paste a key for at least one provider, and click **Save Key & Verify**. Choose the **active provider** and its **model**. Then **shake your mouse** to summon the menu — or, in debug builds, click **Test Overlay** in the dashboard to open it without shaking.
+
+While `flutter run` is attached: press `r` to hot‑reload (Dart/UI), `R` to hot‑restart, `q` to quit. Native C++ changes require a full `flutter run` (they aren't hot‑reloaded).
+
+---
+
+## 📦 Build & package
+
+```bash
+cd magisor_flutter
+flutter build windows          # -> build/windows/x64/runner/Release/
 ```
-This will compile a standalone installer:
-```text
-dist/Magisor Setup 1.0.exe
+
+A standalone installer can be produced from the NSIS script (`magisor_flutter/flutter_installer.nsi`).
+
+---
+
+## 🔑 API keys
+
+Bring your own key for whichever provider(s) you want:
+
+- **Gemini** — Google AI Studio
+- **Claude** — Anthropic Console
+- **Groq** — Groq Console
+
+Keys are stored locally via `flutter_secure_storage` (Windows Credential store). No telemetry.
+
+---
+
+## 📂 Project layout
+
+```
+Magisor/
+├── magisor_flutter/            # The live Flutter + native C++ app
+│   ├── lib/
+│   │   ├── core/               # models, services, AI providers
+│   │   └── ui/                 # screens, widgets, theme
+│   └── windows/runner/         # native C++ (mouse hook, capture, startup)
+├── magisor_project_roadmap.md  # full product vision & roadmap
+└── (legacy Python prototype)   # superseded by magisor_flutter/
 ```
 
 ---
 
-## 🔍 Troubleshooting Matrix
+## 🗺️ Roadmap
 
-| Issue | Root Cause | Solution |
-| :--- | :--- | :--- |
-| **Overlay is offset or blurry** | High-DPI Display Scaling mismatch | Right-click `Magisor.exe` $\rightarrow$ **Properties** $\rightarrow$ **Compatibility** $\rightarrow$ **Change high DPI settings** $\rightarrow$ Check "Override high DPI scaling behavior" and select "Application". |
-| **Shake gesture does not work in task managers or terminal windows** | Privilege Elevation Mismatch | Windows restricts low-level hooks from executing on Admin/System windows when the hook program has standard privileges. To fix, right-click Magisor and choose **Run as Administrator**. |
-| **"404 Model Not Found" error** | Deprecated model reference or API change | Modify the model string in your local `.env` file (e.g., set `GEMINI_MODEL=gemini-2.0-flash` or the latest active version). |
-| **Black screen captures in multi-monitor setups** | Virtual coordinate mapping boundaries | Magisor handles multi-monitor coordinates using `mss`. Ensure your primary monitor is set correctly in Windows Display settings. |
-| **Hotkeys / hooks not firing** | Antivirus false positive | Some anti-malware programs flag low-level keyboard/mouse hooks as keyloggers. Add `Magisor.exe` to your whitelist. |
+See [magisor_project_roadmap.md](magisor_project_roadmap.md) for the full vision. Near‑term highlights: Circle‑to‑Search, universal OCR, cloud sync, and **macOS + mobile** apps.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Licensed under the MIT License — see [LICENSE](LICENSE).
