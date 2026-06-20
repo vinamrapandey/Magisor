@@ -33,6 +33,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   bool _isAsking = false;
   MagisorResponse? _result;
   SavedItem? _currentEntry;
+  String? _lastCaptureBase64;
+  final List<String> _conversation = [];
 
   int _selectedTab = 0;
 
@@ -146,6 +148,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _isAsking = false;
       _result = null;
       _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
     });
     await windowManager.hide();
   }
@@ -167,6 +171,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _isAsking = true;
       _result = null;
       _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
     });
   }
 
@@ -182,6 +188,48 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     }
   }
 
+  /// Continue the conversation about the same captured screen (multi-turn).
+  Future<void> _followUp(String question) async {
+    final image = _lastCaptureBase64;
+    if (image == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final aiProvider = context.read<ProviderRegistry>().active;
+      final storage = context.read<StorageService>();
+
+      _conversation.add('User: $question');
+      final prompt =
+          "Continue this conversation about the user's screen, answering the "
+          "final question.\n\n${_conversation.join('\n')}";
+      final response = await aiProvider.analyzeScreen(image, prompt);
+      _conversation.add('Magisor: ${response.summary}');
+
+      final entry = await storage.addEntry(
+        query: question,
+        summary: response.summary,
+        extractedText: response.extractedText,
+        providerUsed: response.providerUsed,
+      );
+      setState(() {
+        _result = response;
+        _currentEntry = entry;
+      });
+    } catch (e) {
+      setState(() {
+        _result = MagisorResponse(
+          summary: "An error occurred: $e",
+          actions: ["Retry"],
+          extractedText: "",
+          providerUsed: "Error",
+        );
+      });
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   /// Capture the whole screen and answer a free-form question about it.
   Future<void> _submitQuestion(String question) async {
     setState(() {
@@ -190,6 +238,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _isLoading = true;
       _result = null;
       _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
     });
 
     // Let the input bar clear before grabbing the screen.
@@ -222,6 +272,11 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       setState(() {
         _result = response;
         _currentEntry = entry;
+        _lastCaptureBase64 = base64Img;
+        _conversation
+          ..clear()
+          ..add('User: $question')
+          ..add('Magisor: ${response.summary}');
       });
     } catch (e) {
       setState(() {
@@ -254,6 +309,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _isLoading = true;
       _result = null;
       _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
     });
 
     // Wait a tiny bit for UI to clear the menu
@@ -291,6 +348,11 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       setState(() {
         _result = response;
         _currentEntry = entry;
+        _lastCaptureBase64 = base64Img;
+        _conversation
+          ..clear()
+          ..add('User: $action')
+          ..add('Magisor: ${response.summary}');
       });
     } catch (e) {
       setState(() {
@@ -393,6 +455,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
               onFollowUp: _handleAction,
               isSaved: _currentEntry?.saved ?? false,
               onToggleSaved: _currentEntry != null ? _toggleCurrentSaved : null,
+              onAskFollowUp: _lastCaptureBase64 != null ? _followUp : null,
             ),
         ],
       ),
