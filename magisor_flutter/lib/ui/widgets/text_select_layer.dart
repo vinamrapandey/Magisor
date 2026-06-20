@@ -115,16 +115,46 @@ class _TextSelectLayerState extends State<TextSelectLayer> {
             ),
           ),
 
-        // Hint before the first drag.
-        if (_start == null)
-          const IgnorePointer(
-            child: Center(
-              child: Text(
-                'Drag across text to select',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w500),
-              ),
+        // Top bar: hint + a one-tap "Select all".
+        Align(
+          alignment: const Alignment(0, -0.9),
+          child: GlassCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.text_fields, color: AppColors.accentCyan, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  widget.words.isEmpty ? 'No text detected on screen' : 'Drag across text to select',
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                if (widget.words.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  InkWell(
+                    onTap: () => setState(() {
+                      _selected
+                        ..clear()
+                        ..addAll(List.generate(widget.words.length, (i) => i));
+                    }),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentViolet.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Select all',
+                        style: TextStyle(color: AppColors.accentViolet, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
+        ),
 
         // Action toolbar once something is selected.
         if (hasSelection)
