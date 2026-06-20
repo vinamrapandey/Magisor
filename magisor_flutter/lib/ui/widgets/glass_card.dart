@@ -41,7 +41,9 @@ class GlassCard extends StatelessWidget {
               )
             ],
           ),
-          child: child,
+          // Transparent Material so InkWell/ListTile ripples paint correctly
+          // on top of the glass surface (not hidden behind it).
+          child: Material(type: MaterialType.transparency, child: child),
         ),
       ),
     );
