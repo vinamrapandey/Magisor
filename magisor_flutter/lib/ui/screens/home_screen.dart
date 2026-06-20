@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -64,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     Menu menu = Menu(
       items: [
         MenuItem(key: 'dashboard', label: 'Settings & History'),
+        if (kDebugMode) MenuItem(key: 'test_overlay', label: 'Open Overlay (Test)'),
         MenuItem.separator(),
         MenuItem(key: 'exit', label: 'Exit Magisor'),
       ],
@@ -80,6 +82,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   void onTrayMenuItemClick(MenuItem menuItem) {
     if (menuItem.key == 'dashboard') {
       _switchToDashboard();
+    } else if (menuItem.key == 'test_overlay') {
+      _testOverlay();
     } else if (menuItem.key == 'exit') {
       windowManager.destroy();
     }
@@ -142,6 +146,16 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _currentEntry = null;
     });
     await windowManager.hide();
+  }
+
+  /// Dev/testing helper: open the overlay without a mouse shake (debug only).
+  Future<void> _testOverlay() async {
+    await _switchToOverlay(const Offset(500, 400));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final size = MediaQuery.of(context).size;
+      setState(() => _menuPosition = Offset(size.width / 2, size.height / 2));
+    });
   }
 
   /// Open the free-form "What's on my screen?" input bar.
@@ -288,6 +302,17 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
         title: const Text('Magisor Dashboard'),
         elevation: 0,
         backgroundColor: Colors.transparent,
+        actions: [
+          if (kDebugMode)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: _testOverlay,
+                icon: const Icon(Icons.bolt, size: 18),
+                label: const Text('Test Overlay'),
+              ),
+            ),
+        ],
       ),
       body: Row(
         children: [
