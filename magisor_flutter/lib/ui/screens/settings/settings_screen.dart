@@ -42,6 +42,27 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: Text(p.modelId, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text('Model for ${registry.active.providerName}',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                DropdownButton<String>(
+                  isExpanded: true,
+                  value: registry.active.modelId,
+                  dropdownColor: AppColors.backgroundPrimary,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  underline: Container(height: 1, color: AppColors.glassBorder),
+                  items: registry.active.availableModels
+                      .map((m) => DropdownMenuItem(
+                            value: m,
+                            child: Text(m, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (m) {
+                    if (m != null) {
+                      context.read<ProviderRegistry>().setModel(registry.active, m);
+                    }
+                  },
+                ),
                 const Divider(color: AppColors.glassBorder),
                 ListTile(
                   title: const Text('Manage API Keys', style: TextStyle(color: AppColors.textPrimary)),

@@ -40,6 +40,15 @@ class ProviderRegistry extends ChangeNotifier {
     } catch (_) {
       // Secure storage unavailable — keep the default provider.
     }
+    for (final p in providers) {
+      await p.loadModel();
+    }
+    notifyListeners();
+  }
+
+  /// Change the model used by [provider] and notify listeners.
+  Future<void> setModel(AIProvider provider, String model) async {
+    await provider.setModel(model);
     notifyListeners();
   }
 

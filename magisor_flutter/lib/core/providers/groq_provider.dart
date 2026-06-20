@@ -13,7 +13,10 @@ class GroqProvider extends AIProvider {
   String get providerName => 'Groq';
 
   @override
-  String get modelId => 'meta-llama/llama-4-scout-17b-16e-instruct';
+  List<String> get availableModels => const [
+        'meta-llama/llama-4-scout-17b-16e-instruct',
+        'meta-llama/llama-4-maverick-17b-128e-instruct',
+      ];
 
   @override
   bool get supportsVision => true;
