@@ -4,13 +4,16 @@ import 'package:window_manager/window_manager.dart';
 import 'package:tray_manager/tray_manager.dart';
 
 import '../../core/models/magisor_response.dart';
-import '../../core/providers/gemini_provider.dart';
+import '../../core/providers/provider_registry.dart';
 import '../../core/services/capture_service.dart';
 import '../../core/services/shake_detector_service.dart';
+import '../../core/services/storage_service.dart';
 import '../widgets/pie_menu.dart';
 import '../widgets/ai_result_overlay.dart';
+import '../widgets/ask_bar.dart';
 import 'settings/settings_screen.dart';
 import 'history_screen.dart';
+import 'saved_screen.dart';
 
 enum AppMode { dashboard, overlay }
 
@@ -25,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   AppMode _currentMode = AppMode.dashboard;
   Offset? _menuPosition;
   bool _isLoading = false;
+  bool _isAsking = false;
   MagisorResponse? _result;
 
   int _selectedTab = 0;
@@ -131,9 +135,67 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   Future<void> _closeOverlay() async {
     setState(() {
       _menuPosition = null;
+      _isAsking = false;
       _result = null;
     });
     await windowManager.hide();
+  }
+
+  /// Open the free-form "What's on my screen?" input bar.
+  void _startAsk() {
+    setState(() {
+      _menuPosition = null;
+      _isAsking = true;
+      _result = null;
+    });
+  }
+
+  /// Capture the whole screen and answer a free-form question about it.
+  Future<void> _submitQuestion(String question) async {
+    setState(() {
+      _isAsking = false;
+      _menuPosition = null;
+      _isLoading = true;
+      _result = null;
+    });
+
+    // Let the input bar clear before grabbing the screen.
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    try {
+      final captureService = context.read<CaptureService>();
+      final aiProvider = context.read<ProviderRegistry>().active;
+      final storage = context.read<StorageService>();
+
+      final screenSize = MediaQuery.of(context).size;
+      // Capture the full screen as a single region (known dimensions).
+      final region = Rect.fromLTWH(0, 0, screenSize.width, screenSize.height);
+
+      final imageBytes = await captureService.captureRegion(region);
+      final base64Img = captureService.toBase64Jpeg(
+          imageBytes, region.width.toInt(), region.height.toInt());
+
+      final response = await aiProvider.analyzeScreen(base64Img, question);
+
+      setState(() => _result = response);
+      storage.addEntry(
+        query: question,
+        summary: response.summary,
+        extractedText: response.extractedText,
+        providerUsed: response.providerUsed,
+      );
+    } catch (e) {
+      setState(() {
+        _result = MagisorResponse(
+          summary: "An error occurred while analyzing your screen: $e",
+          actions: ["Retry", "Check Settings"],
+          extractedText: "",
+          providerUsed: "Error",
+        );
+      });
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _handleAction(String action) async {
@@ -159,21 +221,28 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
     try {
       final captureService = context.read<CaptureService>();
-      final aiProvider = context.read<GeminiProvider>(); 
-      
+      final aiProvider = context.read<ProviderRegistry>().active;
+      final storage = context.read<StorageService>();
+
       final screenSize = MediaQuery.of(context).size;
       final region = captureService.regionAroundPoint(center, screenSize);
-      
+
       // Capture from native C++ Hook
       final imageBytes = await captureService.captureRegion(region);
       final base64Img = captureService.toBase64Jpeg(imageBytes, region.width.toInt(), region.height.toInt());
-      
+
       final prompt = "Action requested: $action. Analyze the provided screen capture and provide a JSON response following the system prompt.";
       final response = await aiProvider.analyzeScreen(base64Img, prompt);
-      
+
       setState(() {
         _result = response;
       });
+      storage.addEntry(
+        query: action,
+        summary: response.summary,
+        extractedText: response.extractedText,
+        providerUsed: response.providerUsed,
+      );
     } catch (e) {
       setState(() {
         _result = MagisorResponse(
@@ -214,11 +283,19 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
                 icon: Icon(Icons.history),
                 label: Text('History'),
               ),
+              NavigationRailDestination(
+                icon: Icon(Icons.bookmark_border),
+                label: Text('Saved'),
+              ),
             ],
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
-            child: _selectedTab == 0 ? const SettingsScreen() : const HistoryScreen(),
+            child: switch (_selectedTab) {
+              0 => const SettingsScreen(),
+              1 => const HistoryScreen(),
+              _ => const SavedScreen(),
+            },
           ),
         ],
       ),
@@ -235,12 +312,18 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
               centerPosition: _menuPosition!,
               onClose: _closeOverlay,
               items: [
+                PieMenuItem(icon: Icons.chat_bubble_outline, label: "Ask", onTap: _startAsk),
                 PieMenuItem(icon: Icons.auto_awesome, label: "Summarize", onTap: () => _handleAction("Summarize")),
                 PieMenuItem(icon: Icons.lightbulb_outline, label: "Explain", onTap: () => _handleAction("Explain")),
                 PieMenuItem(icon: Icons.translate, label: "Translate", onTap: () => _handleAction("Translate")),
                 PieMenuItem(icon: Icons.copy_all, label: "Copy Text", onTap: () => _handleAction("Copy Text")),
                 PieMenuItem(icon: Icons.close, label: "Close", onTap: () => _handleAction("Close")),
               ],
+            ),
+          if (_isAsking)
+            AskBar(
+              onSubmit: _submitQuestion,
+              onCancel: _closeOverlay,
             ),
           if (_isLoading || _result != null)
             AIResultOverlay(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../../core/providers/provider_registry.dart';
 import '../../../core/services/shake_detector_service.dart';
 import '../onboarding/provider_setup_screen.dart';
 
@@ -11,6 +12,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shakeService = context.watch<ShakeDetectorService>();
+    final registry = context.watch<ProviderRegistry>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings'), backgroundColor: Colors.transparent, iconTheme: const IconThemeData(color: AppColors.textPrimary)),
@@ -22,10 +24,27 @@ class SettingsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('AI Providers', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                const Text('Active provider used for screen analysis', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                const SizedBox(height: 8),
+                ...registry.providers.map(
+                  (p) => RadioListTile<String>(
+                    value: p.providerName,
+                    groupValue: registry.active.providerName,
+                    onChanged: (name) {
+                      if (name != null) registry.setActive(name);
+                    },
+                    activeColor: AppColors.accentViolet,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(p.providerName, style: const TextStyle(color: AppColors.textPrimary)),
+                    subtitle: Text(p.modelId, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                  ),
+                ),
+                const Divider(color: AppColors.glassBorder),
                 ListTile(
                   title: const Text('Manage API Keys', style: TextStyle(color: AppColors.textPrimary)),
                   trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                  contentPadding: EdgeInsets.zero,
                   onTap: () {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ProviderSetupScreen()));
                   },
