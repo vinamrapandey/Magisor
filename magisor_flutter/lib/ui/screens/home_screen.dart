@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -38,6 +40,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   final List<String> _conversation = [];
   bool _isSelecting = false;
 
+  // The frozen screenshot shown under the overlay, and its physical bounds.
+  Uint8List? _frozenJpeg;
+  Rect? _frozenRect;
+
   int _selectedTab = 0;
 
   @override
@@ -51,9 +57,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final shakeService = context.read<ShakeDetectorService>();
       shakeService.onShakeDetected = (x, y) async {
-        // Shake coords are physical pixels; convert to Flutter logical space.
-        final dpr = MediaQuery.of(context).devicePixelRatio;
-        await _switchToOverlay(Offset(x / dpr, y / dpr));
+        // Shake coords are physical pixels.
+        await _invokeOverlay(physicalPoint: Offset(x, y));
       };
     });
   }
@@ -121,27 +126,62 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     await windowManager.focus();
   }
 
-  Future<void> _switchToOverlay(Offset position) async {
-    // Hide briefly so capture doesn't capture the app window if it was visible
-    bool isVisible = await windowManager.isVisible();
-    if (isVisible) {
-      await windowManager.hide();
-      await Future.delayed(const Duration(milliseconds: 60));
-    }
-    
+  /// Brings the window forward as a frameless, always-on-top fullscreen overlay.
+  Future<void> _showOverlayWindow() async {
     await windowManager.setAsFrameless();
     await windowManager.setHasShadow(false);
     await windowManager.setAlwaysOnTop(true);
     await windowManager.maximize();
-    
-    setState(() {
-      _currentMode = AppMode.overlay;
-      _menuPosition = position;
-      _result = null;
-    });
-    
     await windowManager.show();
     await windowManager.focus();
+  }
+
+  /// Freezes the screen, then opens the overlay over that frozen screenshot.
+  /// [physicalPoint] is the invocation location in physical pixels (the shake
+  /// position); null centers the menu (test trigger).
+  Future<void> _invokeOverlay({Offset? physicalPoint}) async {
+    final captureService = context.read<CaptureService>();
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+
+    // Make sure no Magisor window is in the screenshot.
+    if (await windowManager.isVisible()) {
+      await windowManager.hide();
+      await Future.delayed(const Duration(milliseconds: 80));
+    }
+
+    // Freeze the primary monitor.
+    final rect = await captureService.getPrimaryScreenRect();
+    Uint8List? jpeg;
+    if (rect != null) {
+      final bytes = await captureService.captureRegion(rect);
+      jpeg = captureService.jpegBytes(bytes, rect.width.toInt(), rect.height.toInt());
+      if (jpeg.isEmpty) jpeg = null;
+    }
+
+    // Logical menu position.
+    final Offset menuPos;
+    if (physicalPoint != null) {
+      menuPos = Offset(physicalPoint.dx / dpr, physicalPoint.dy / dpr);
+    } else if (rect != null) {
+      menuPos = Offset(rect.width / dpr / 2, rect.height / dpr / 2);
+    } else {
+      menuPos = const Offset(400, 300);
+    }
+
+    setState(() {
+      _currentMode = AppMode.overlay;
+      _frozenJpeg = jpeg;
+      _frozenRect = rect;
+      _menuPosition = menuPos;
+      _isAsking = false;
+      _isSelecting = false;
+      _result = null;
+      _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
+    });
+
+    await _showOverlayWindow();
   }
 
   Future<void> _closeOverlay() async {
@@ -153,18 +193,28 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _currentEntry = null;
       _lastCaptureBase64 = null;
       _conversation.clear();
+      _frozenJpeg = null;
+      _frozenRect = null;
     });
     await windowManager.hide();
   }
 
   /// Dev/testing helper: open the overlay without a mouse shake (debug only).
   Future<void> _testOverlay() async {
-    await _switchToOverlay(const Offset(500, 400));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final size = MediaQuery.of(context).size;
-      setState(() => _menuPosition = Offset(size.width / 2, size.height / 2));
-    });
+    await _invokeOverlay();
+  }
+
+  /// Maps a rect in overlay-logical coordinates to the frozen image's physical
+  /// pixels (robust to the overlay not being exactly full-screen).
+  Rect _logicalToImageRect(Rect logical, Size overlaySize, Rect imageRect) {
+    final sx = imageRect.width / overlaySize.width;
+    final sy = imageRect.height / overlaySize.height;
+    return Rect.fromLTWH(
+      logical.left * sx,
+      logical.top * sy,
+      logical.width * sx,
+      logical.height * sy,
+    );
   }
 
   /// Open the free-form "What's on my screen?" input bar.
@@ -247,11 +297,12 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
   /// Handle a region drawn in "Circle to Search" mode.
   Future<void> _onRegionSelected(Rect logicalRect) async {
-    final dpr = MediaQuery.of(context).devicePixelRatio;
     if (logicalRect.width < 8 || logicalRect.height < 8) {
       setState(() => _isSelecting = false);
       return;
     }
+    final overlaySize = MediaQuery.of(context).size;
+    final frozen = _frozenRect;
     setState(() {
       _isSelecting = false;
       _isLoading = true;
@@ -260,16 +311,22 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _lastCaptureBase64 = null;
       _conversation.clear();
     });
-    // Let the selection overlay clear before capturing.
-    await Future.delayed(const Duration(milliseconds: 60));
-    final physical = Rect.fromLTWH(
-      logicalRect.left * dpr,
-      logicalRect.top * dpr,
-      logicalRect.width * dpr,
-      logicalRect.height * dpr,
-    );
+    if (frozen == null) {
+      setState(() {
+        _result = MagisorResponse(
+          summary: "No screen capture available.",
+          actions: const ["Retry"],
+          extractedText: "",
+          providerUsed: "Error",
+        );
+        _isLoading = false;
+      });
+      return;
+    }
+    // Map the drawn rect onto the frozen screenshot's pixels.
+    final imageRect = _logicalToImageRect(logicalRect, overlaySize, frozen);
     await _analyzeRegion(
-      physical,
+      imageRect,
       query: 'Circle to Search',
       prompt: "The user selected a specific region of their screen. Identify, "
           "explain, or search what it contains, and respond following the "
@@ -277,16 +334,15 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     );
   }
 
-  /// Capture a physical-pixel region, analyze it, and show the result.
-  Future<void> _analyzeRegion(Rect physicalRegion,
+  /// Crop a region out of the frozen screenshot, analyze it, and show the result.
+  Future<void> _analyzeRegion(Rect imageRect,
       {required String query, required String prompt}) async {
     final captureService = context.read<CaptureService>();
     final aiProvider = context.read<ProviderRegistry>().active;
     final storage = context.read<StorageService>();
+    final jpeg = _frozenJpeg;
     try {
-      final bytes = await captureService.captureRegion(physicalRegion);
-      final b64 = captureService.toBase64Jpeg(
-          bytes, physicalRegion.width.toInt(), physicalRegion.height.toInt());
+      final b64 = jpeg != null ? captureService.cropToBase64Jpeg(jpeg, imageRect) : '';
       final response = await aiProvider.analyzeScreen(b64, prompt);
       final entry = await storage.addEntry(
         query: query,
@@ -331,24 +387,14 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _conversation.clear();
     });
 
-    // Let the input bar clear before grabbing the screen.
-    await Future.delayed(const Duration(milliseconds: 50));
-
     try {
-      final captureService = context.read<CaptureService>();
       final aiProvider = context.read<ProviderRegistry>().active;
       final storage = context.read<StorageService>();
 
-      final mq = MediaQuery.of(context);
-      // Capture the whole virtual desktop in physical pixels (covers all
-      // monitors and is DPI-correct); fall back to the window's physical size.
-      final region = await captureService.getVirtualScreenRect() ??
-          Rect.fromLTWH(0, 0, mq.size.width * mq.devicePixelRatio,
-              mq.size.height * mq.devicePixelRatio);
-
-      final imageBytes = await captureService.captureRegion(region);
-      final base64Img = captureService.toBase64Jpeg(
-          imageBytes, region.width.toInt(), region.height.toInt());
+      // Use the full frozen screenshot taken when the overlay opened.
+      final jpeg = _frozenJpeg;
+      final base64Img =
+          (jpeg != null && jpeg.isNotEmpty) ? base64Encode(jpeg) : '';
 
       final response = await aiProvider.analyzeScreen(base64Img, question);
 
@@ -410,20 +456,16 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       final aiProvider = context.read<ProviderRegistry>().active;
       final storage = context.read<StorageService>();
 
-      final mq = MediaQuery.of(context);
-      final dpr = mq.devicePixelRatio;
-      final logicalRegion = captureService.regionAroundPoint(center, mq.size);
-      // Native capture works in physical pixels, so scale by the DPR.
-      final region = Rect.fromLTWH(
-        logicalRegion.left * dpr,
-        logicalRegion.top * dpr,
-        logicalRegion.width * dpr,
-        logicalRegion.height * dpr,
-      );
-
-      final imageBytes = await captureService.captureRegion(region);
-      final base64Img = captureService.toBase64Jpeg(
-          imageBytes, region.width.toInt(), region.height.toInt());
+      // Crop a region around the cursor out of the frozen screenshot.
+      final jpeg = _frozenJpeg;
+      final frozen = _frozenRect;
+      String base64Img = '';
+      if (jpeg != null && frozen != null) {
+        final overlaySize = MediaQuery.of(context).size;
+        final logicalRegion = captureService.regionAroundPoint(center, overlaySize);
+        final crop = _logicalToImageRect(logicalRegion, overlaySize, frozen);
+        base64Img = captureService.cropToBase64Jpeg(jpeg, crop);
+      }
 
       final prompt = "Action requested: $action. Analyze the provided screen capture and provide a JSON response following the system prompt.";
       final response = await aiProvider.analyzeScreen(base64Img, prompt);
@@ -518,6 +560,14 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
+          if (_frozenJpeg != null)
+            Positioned.fill(
+              child: Image.memory(
+                _frozenJpeg!,
+                fit: BoxFit.fill,
+                gaplessPlayback: true,
+              ),
+            ),
           if (_menuPosition != null)
             PieMenu(
               centerPosition: _menuPosition!,

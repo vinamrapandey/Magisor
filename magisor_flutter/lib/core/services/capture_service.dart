@@ -26,6 +26,25 @@ class CaptureService {
     return null;
   }
 
+  /// Physical-pixel bounds of the primary monitor (origin 0,0). The overlay is
+  /// maximized on the primary monitor, so this is what we freeze.
+  Future<Rect?> getPrimaryScreenRect() async {
+    try {
+      final r = await _channel.invokeMethod('getPrimaryScreenRect');
+      if (r is Map) {
+        return Rect.fromLTWH(
+          (r['x'] as num).toDouble(),
+          (r['y'] as num).toDouble(),
+          (r['width'] as num).toDouble(),
+          (r['height'] as num).toDouble(),
+        );
+      }
+    } catch (e) {
+      debugPrint('Warning: getPrimaryScreenRect failed: $e');
+    }
+    return null;
+  }
+
   /// Captures a region given in **physical** screen pixels (matching the
   /// native low-level mouse hook coordinates and DPI-aware screen metrics).
   Future<Uint8List> captureRegion(Rect region) async {
@@ -53,17 +72,38 @@ class CaptureService {
     }
   }
 
-  String toBase64Jpeg(Uint8List bgraBytes, int width, int height) {
-    if (bgraBytes.isEmpty) return '';
-    // Native C++ code returns raw BGRA bytes using BitBlt and GetDIBits
+  /// Encodes raw BGRA bytes (from the native capture) to JPEG bytes, for
+  /// display via [Image.memory].
+  Uint8List jpegBytes(Uint8List bgraBytes, int width, int height) {
+    if (bgraBytes.isEmpty) return Uint8List(0);
+    // Native C++ code returns raw BGRA bytes using BitBlt and GetDIBits.
     final image = img.Image.fromBytes(
-      width: width, 
-      height: height, 
-      bytes: bgraBytes.buffer, 
-      order: img.ChannelOrder.bgra
+      width: width,
+      height: height,
+      bytes: bgraBytes.buffer,
+      order: img.ChannelOrder.bgra,
     );
-    final jpegBytes = img.encodeJpg(image, quality: 80);
-    return base64Encode(jpegBytes);
+    return img.encodeJpg(image, quality: 85);
+  }
+
+  String toBase64Jpeg(Uint8List bgraBytes, int width, int height) {
+    final jpeg = jpegBytes(bgraBytes, width, height);
+    return jpeg.isEmpty ? '' : base64Encode(jpeg);
+  }
+
+  /// Crops a [physicalCrop] region out of an already-captured JPEG and returns
+  /// it as base64 JPEG. Used so analysis crops from the frozen screenshot
+  /// instead of re-capturing (which would capture our own overlay).
+  String cropToBase64Jpeg(Uint8List jpeg, Rect physicalCrop) {
+    if (jpeg.isEmpty) return '';
+    final image = img.decodeJpg(jpeg);
+    if (image == null) return base64Encode(jpeg);
+    final x = physicalCrop.left.toInt().clamp(0, image.width - 1);
+    final y = physicalCrop.top.toInt().clamp(0, image.height - 1);
+    final w = physicalCrop.width.toInt().clamp(1, image.width - x);
+    final h = physicalCrop.height.toInt().clamp(1, image.height - y);
+    final crop = img.copyCrop(image, x: x, y: y, width: w, height: h);
+    return base64Encode(img.encodeJpg(crop, quality: 85));
   }
 
   Rect regionAroundPoint(Offset center, Size screenSize) {
