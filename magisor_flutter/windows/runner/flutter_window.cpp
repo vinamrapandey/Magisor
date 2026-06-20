@@ -9,6 +9,94 @@
 #include <chrono>
 #include <cmath>
 #include <string>
+#include <thread>
+#include <algorithm>
+#include <cstring>
+
+#include <unknwn.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Globalization.h>
+#include <winrt/Windows.Graphics.Imaging.h>
+#include <winrt/Windows.Media.Ocr.h>
+
+// Custom window message used to hand an OCR result back to the UI thread.
+#define WM_OCR_DONE (WM_APP + 1)
+
+// COM interface for getting the raw byte pointer of a SoftwareBitmap buffer.
+struct __declspec(uuid("5b0d3235-4dba-4d44-865e-8f1d0e4fd04d")) __declspec(novtable)
+IMemoryBufferByteAccess : ::IUnknown {
+  virtual HRESULT __stdcall GetBuffer(uint8_t** value, uint32_t* capacity) = 0;
+};
+
+namespace {
+
+// Holds the in-flight method result + the value to send back, so it can be
+// passed across threads via PostMessage.
+struct PendingOcr {
+  std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result;
+  flutter::EncodableValue value;
+  bool isError = false;
+  std::string errorMessage;
+};
+
+// Runs Windows.Media.Ocr on a background (multi-threaded apartment) thread.
+// Fills `out->value` with a list of {text,x,y,w,h} word boxes, or sets an error.
+void RunOcr(const std::vector<uint8_t>& bgra, int width, int height, PendingOcr* out) {
+  bool comInit = false;
+  try {
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    comInit = true;
+
+    using namespace winrt::Windows::Graphics::Imaging;
+    using namespace winrt::Windows::Media::Ocr;
+
+    SoftwareBitmap bitmap(BitmapPixelFormat::Bgra8, width, height,
+                          BitmapAlphaMode::Premultiplied);
+    {
+      BitmapBuffer buffer = bitmap.LockBuffer(BitmapBufferAccessMode::Write);
+      auto reference = buffer.CreateReference();
+      auto byteAccess = reference.as<IMemoryBufferByteAccess>();
+      uint8_t* data = nullptr;
+      uint32_t capacity = 0;
+      winrt::check_hresult(byteAccess->GetBuffer(&data, &capacity));
+      size_t toCopy = std::min<size_t>(capacity, bgra.size());
+      std::memcpy(data, bgra.data(), toCopy);
+    }
+
+    OcrEngine engine = OcrEngine::TryCreateFromUserProfileLanguages();
+    if (!engine) {
+      out->isError = true;
+      out->errorMessage = "No OCR language pack is installed";
+    } else {
+      auto ocrResult = engine.RecognizeAsync(bitmap).get();
+      flutter::EncodableList words;
+      for (auto const& line : ocrResult.Lines()) {
+        for (auto const& word : line.Words()) {
+          auto r = word.BoundingRect();
+          flutter::EncodableMap m;
+          m[flutter::EncodableValue("text")] =
+              flutter::EncodableValue(winrt::to_string(word.Text()));
+          m[flutter::EncodableValue("x")] = flutter::EncodableValue((double)r.X);
+          m[flutter::EncodableValue("y")] = flutter::EncodableValue((double)r.Y);
+          m[flutter::EncodableValue("w")] = flutter::EncodableValue((double)r.Width);
+          m[flutter::EncodableValue("h")] = flutter::EncodableValue((double)r.Height);
+          words.push_back(flutter::EncodableValue(m));
+        }
+      }
+      out->value = flutter::EncodableValue(words);
+    }
+  } catch (winrt::hresult_error const& e) {
+    out->isError = true;
+    out->errorMessage = winrt::to_string(e.message());
+  } catch (...) {
+    out->isError = true;
+    out->errorMessage = "OCR failed";
+  }
+  if (comInit) winrt::uninit_apartment();
+}
+
+}  // namespace
 
 static HHOOK g_mouseHook = NULL;
 static FlutterWindow* g_flutterWindow = nullptr;
@@ -145,6 +233,20 @@ LRESULT FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case WM_OCR_DONE: {
+      // OCR worker finished; we're back on the UI thread, so it's safe to
+      // complete the Flutter method result here.
+      PendingOcr* pending = reinterpret_cast<PendingOcr*>(lparam);
+      if (pending) {
+        if (pending->isError) {
+          pending->result->Error("ocr_error", pending->errorMessage);
+        } else {
+          pending->result->Success(pending->value);
+        }
+        delete pending;
+      }
+      return 0;
+    }
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
@@ -348,5 +450,52 @@ void FlutterWindow::SetupChannels() {
             } else {
                 result->NotImplemented();
             }
+        });
+
+    ocr_channel_ =
+        std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+            messenger, "magisor/ocr",
+            &flutter::StandardMethodCodec::GetInstance());
+
+    ocr_channel_->SetMethodCallHandler(
+        [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+               std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+            if (call.method_name() != "recognize") {
+                result->NotImplemented();
+                return;
+            }
+            const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+            std::vector<uint8_t> bytes;
+            int width = 0, height = 0;
+            if (args) {
+                auto itB = args->find(flutter::EncodableValue("bytes"));
+                if (itB != args->end() &&
+                    std::holds_alternative<std::vector<uint8_t>>(itB->second)) {
+                    bytes = std::get<std::vector<uint8_t>>(itB->second);
+                }
+                auto itW = args->find(flutter::EncodableValue("width"));
+                if (itW != args->end() && std::holds_alternative<int>(itW->second)) {
+                    width = std::get<int>(itW->second);
+                }
+                auto itH = args->find(flutter::EncodableValue("height"));
+                if (itH != args->end() && std::holds_alternative<int>(itH->second)) {
+                    height = std::get<int>(itH->second);
+                }
+            }
+            if (bytes.empty() || width <= 0 || height <= 0) {
+                result->Success(flutter::EncodableValue(flutter::EncodableList{}));
+                return;
+            }
+            // Hand off to a worker thread (WinRT OCR can't block the STA UI
+            // thread); the worker posts the result back via WM_OCR_DONE.
+            HWND hwnd = GetHandle();
+            PendingOcr* pending = new PendingOcr();
+            pending->result = std::move(result);
+            std::thread(
+                [hwnd, pending, captured = std::move(bytes), width, height]() mutable {
+                    RunOcr(captured, width, height, pending);
+                    PostMessage(hwnd, WM_OCR_DONE, 0, reinterpret_cast<LPARAM>(pending));
+                })
+                .detach();
         });
 }

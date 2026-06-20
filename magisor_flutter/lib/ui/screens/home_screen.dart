@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -10,12 +12,14 @@ import '../../core/models/magisor_response.dart';
 import '../../core/models/saved_item.dart';
 import '../../core/providers/provider_registry.dart';
 import '../../core/services/capture_service.dart';
+import '../../core/services/ocr_service.dart';
 import '../../core/services/shake_detector_service.dart';
 import '../../core/services/storage_service.dart';
 import '../widgets/pie_menu.dart';
 import '../widgets/ai_result_overlay.dart';
 import '../widgets/ask_bar.dart';
 import '../widgets/region_selector.dart';
+import '../widgets/text_select_layer.dart';
 import 'settings/settings_screen.dart';
 import 'history_screen.dart';
 import 'saved_screen.dart';
@@ -39,10 +43,13 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   String? _lastCaptureBase64;
   final List<String> _conversation = [];
   bool _isSelecting = false;
+  bool _isTextSelecting = false;
 
   // The frozen screenshot shown under the overlay, and its physical bounds.
   Uint8List? _frozenJpeg;
   Rect? _frozenRect;
+  // OCR word boxes for the frozen screenshot (used by Phase 3 text selection).
+  List<WordBox> _wordBoxes = const [];
 
   int _selectedTab = 0;
 
@@ -141,6 +148,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   /// position); null centers the menu (test trigger).
   Future<void> _invokeOverlay({Offset? physicalPoint}) async {
     final captureService = context.read<CaptureService>();
+    final ocrService = context.read<OcrService>();
     final dpr = MediaQuery.of(context).devicePixelRatio;
 
     // Make sure no Magisor window is in the screenshot.
@@ -152,9 +160,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     // Freeze the primary monitor.
     final rect = await captureService.getPrimaryScreenRect();
     Uint8List? jpeg;
+    Uint8List? bgra;
     if (rect != null) {
-      final bytes = await captureService.captureRegion(rect);
-      jpeg = captureService.jpegBytes(bytes, rect.width.toInt(), rect.height.toInt());
+      bgra = await captureService.captureRegion(rect);
+      jpeg = captureService.jpegBytes(bgra, rect.width.toInt(), rect.height.toInt());
       if (jpeg.isEmpty) jpeg = null;
     }
 
@@ -179,9 +188,23 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _currentEntry = null;
       _lastCaptureBase64 = null;
       _conversation.clear();
+      _isTextSelecting = false;
+      _wordBoxes = const [];
     });
 
     await _showOverlayWindow();
+
+    // Phase 2: OCR the frozen screenshot in the background; Phase 3 will use the
+    // word boxes for text selection. Fire-and-forget — it doesn't block the UI.
+    if (rect != null && bgra != null && bgra.isNotEmpty) {
+      ocrService
+          .recognize(bgra, rect.width.toInt(), rect.height.toInt())
+          .then((boxes) {
+        if (!mounted) return;
+        debugPrint('OCR: ${boxes.length} words recognized');
+        setState(() => _wordBoxes = boxes);
+      });
+    }
   }
 
   Future<void> _closeOverlay() async {
@@ -193,8 +216,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _currentEntry = null;
       _lastCaptureBase64 = null;
       _conversation.clear();
+      _isTextSelecting = false;
       _frozenJpeg = null;
       _frozenRect = null;
+      _wordBoxes = const [];
     });
     await windowManager.hide();
   }
@@ -239,6 +264,106 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _lastCaptureBase64 = null;
       _conversation.clear();
     });
+  }
+
+  /// Enter "Select Text" mode (drag-select OCR'd words on the frozen shot).
+  void _startTextSelect() {
+    setState(() {
+      _menuPosition = null;
+      _isTextSelecting = true;
+      _result = null;
+      _currentEntry = null;
+    });
+  }
+
+  /// Maps OCR word boxes (frozen-image physical px) to overlay-logical coords.
+  List<PositionedWord> _wordBoxesLogical(Size overlaySize) {
+    final frozen = _frozenRect;
+    if (frozen == null || frozen.width <= 0 || frozen.height <= 0) return const [];
+    final sx = overlaySize.width / frozen.width;
+    final sy = overlaySize.height / frozen.height;
+    return _wordBoxes
+        .map((wb) => (
+              rect: Rect.fromLTWH(
+                wb.rect.left * sx,
+                wb.rect.top * sy,
+                wb.rect.width * sx,
+                wb.rect.height * sy,
+              ),
+              text: wb.text,
+            ))
+        .toList();
+  }
+
+  /// Handle a toolbar action on selected text.
+  Future<void> _onTextAction(String action, String text) async {
+    if (text.trim().isEmpty) return;
+    if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: text));
+      await _closeOverlay();
+      return;
+    }
+    if (action == 'search') {
+      final uri = Uri.parse(
+          'https://www.google.com/search?q=${Uri.encodeQueryComponent(text)}');
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      await _closeOverlay();
+      return;
+    }
+    // translate / ask -> AI on the selected text (no image needed).
+    setState(() {
+      _isTextSelecting = false;
+      _isLoading = true;
+      _result = null;
+      _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
+    });
+    final isTranslate = action == 'translate';
+    final prompt = isTranslate
+        ? "Translate this text to English (or detect and state its language if it is already English):\n\n$text"
+        : "Explain this text concisely:\n\n$text";
+    await _analyzeText(
+      query: isTranslate ? 'Translate' : 'Ask',
+      text: text,
+      prompt: prompt,
+    );
+  }
+
+  /// Run a text-only AI analysis, show the result, and persist it.
+  Future<void> _analyzeText({
+    required String query,
+    required String text,
+    required String prompt,
+  }) async {
+    final aiProvider = context.read<ProviderRegistry>().active;
+    final storage = context.read<StorageService>();
+    try {
+      final response = await aiProvider.analyzeText(text, prompt);
+      final entry = await storage.addEntry(
+        query: query,
+        summary: response.summary,
+        extractedText: text,
+        providerUsed: response.providerUsed,
+      );
+      if (!mounted) return;
+      setState(() {
+        _result = response;
+        _currentEntry = entry;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _result = MagisorResponse(
+          summary: "An error occurred: $e",
+          actions: const ["Retry"],
+          extractedText: "",
+          providerUsed: "Error",
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   /// Star/unstar the result currently shown in the overlay.
@@ -578,7 +703,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
                 PieMenuItem(icon: Icons.auto_awesome, label: "Summarize", onTap: () => _handleAction("Summarize")),
                 PieMenuItem(icon: Icons.lightbulb_outline, label: "Explain", onTap: () => _handleAction("Explain")),
                 PieMenuItem(icon: Icons.translate, label: "Translate", onTap: () => _handleAction("Translate")),
-                PieMenuItem(icon: Icons.copy_all, label: "Copy Text", onTap: () => _handleAction("Copy Text")),
+                PieMenuItem(icon: Icons.text_fields, label: "Select Text", onTap: _startTextSelect),
                 PieMenuItem(icon: Icons.close, label: "Close", onTap: () => _handleAction("Close")),
               ],
             ),
@@ -591,6 +716,14 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
             Positioned.fill(
               child: RegionSelector(
                 onSelected: _onRegionSelected,
+                onCancel: _closeOverlay,
+              ),
+            ),
+          if (_isTextSelecting)
+            Positioned.fill(
+              child: TextSelectLayer(
+                words: _wordBoxesLogical(MediaQuery.of(context).size),
+                onAction: _onTextAction,
                 onCancel: _closeOverlay,
               ),
             ),

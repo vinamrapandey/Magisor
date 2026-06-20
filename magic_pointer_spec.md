@@ -68,7 +68,7 @@ with the native `magisor/ocr` channel.
 ## 4. Phases (implement in order; each ends green: `flutter analyze` 0 errors +
 `flutter build windows` + launch)
 
-### Phase 1 — Freeze-screenshot overlay (no new deps)
+### Phase 1 — Freeze-screenshot overlay (no new deps)  ✅ DONE
 Convert the overlay from transparent-live to showing the captured bitmap.
 - On shake: capture the full virtual screen FIRST, decode to a Flutter `Image`,
   store as `_frozenShot` (Uint8List / ui.Image).
@@ -79,7 +79,7 @@ Convert the overlay from transparent-live to showing the captured bitmap.
   new `frozen_canvas.dart` widget (renders the shot + hosts interaction layers).
 - Risk: memory (hold one full-screen bitmap); free it on close.
 
-### Phase 2 — Native Windows OCR (`Windows.Media.Ocr`)
+### Phase 2 — Native Windows OCR (`Windows.Media.Ocr`)  ✅ DONE
 - New C++ method channel `magisor/ocr` with `recognize(bytes,width,height)` →
   returns `[{text, x, y, w, h}]` word boxes (physical px).
 - Implement with WinRT `OcrEngine.TryCreateFromUserProfileLanguages()` →
@@ -87,7 +87,7 @@ Convert the overlay from transparent-live to showing the captured bitmap.
 - Dart `OcrService` wraps the channel (replaces ML Kit usage).
 - Run OCR on the frozen shot in the background right after capture; cache boxes.
 
-### Phase 3 — Text-selection mode
+### Phase 3 — Text-selection mode  ✅ DONE
 - New "Select Text" radial node → enters text-select mode over the frozen shot.
 - Render OCR word boxes as an invisible selectable layer; drag to select a run
   of words (Google-Lens style highlight); show a small toolbar:
@@ -96,17 +96,29 @@ Convert the overlay from transparent-live to showing the captured bitmap.
   Search → `url_launcher` to a search URL.
 - Files: new `text_select_layer.dart`; wire actions in `home_screen.dart`.
 
-### Phase 4 — UI Automation hybrid (accuracy + live)
-- New C++ channel `magisor/uia` → `textUnderPoint(x,y)` / `focusedElementText()`
-  using the UIAutomation COM API.
-- Strategy: when entering text-select, try UIA for exact text where the app
-  exposes it; fall back to the Phase-2 OCR boxes otherwise. Merge into one
-  selection model (the README's "multimodal context merging").
+### Phase 4 — UI Automation hybrid  ⚠️ REVISED — does not fit the freeze model
+**Finding (2026-06-21):** UI Automation reads the **live** accessibility tree by
+screen coordinate, but our overlay is **topmost and interactive** over a
+**frozen** screenshot. So `ElementFromPoint` at the drag location returns our
+own overlay, not the app beneath — and UIA has no concept of the frozen image's
+pixels. UIA is a *live-pointing* technology; this flow is *capture-then-select*.
+They don't compose for spatial text selection, and **OCR (Phases 2–3) already
+covers it well** (verified: 270+ words recognized on a real screen).
 
-### Phase 5 — Magic-Pointer "point" mode (north star)
-- Hover/click an element on the frozen shot → assemble context around the
-  pointer (OCR text + UIA element + a crop) → AI explains/acts with natural
-  language ("summarize this", "turn this table into a chart").
+So UIA-hybrid-*for-selection* is **dropped**. UIA's real home is Phase 5 (live
+point mode), or an optional invoke-time grab of the focused window's exact text
+to sharpen AI answers (heavy native COM, performance traps) — deferred.
+
+### Phase 5 — Magic-Pointer "point" mode (north star, future)
+A separate **live** (non-freeze) interaction: point at live content and the AI
+understands what's under the pointer (UIA element + a live crop + OCR). This is
+where UI Automation belongs. A bigger, new interaction model — revisit after the
+freeze-based desktop Magic Pointer is finalized.
+
+### Polish / finalize (current)
+- ✅ "Select all" in text mode (one-tap whole-screen Copy / Translate / Search / Ask).
+- ✅ GlassCard wrapped in a transparent Material (fixes ListTile ink ripples).
+- Optional: pixel-exact fullscreen overlay (remove the slight taskbar stretch).
 
 ---
 
