@@ -283,6 +283,16 @@ void FlutterWindow::SetupChannels() {
                     {flutter::EncodableValue("height"), flutter::EncodableValue(vh)},
                 };
                 result->Success(flutter::EncodableValue(rect));
+            } else if (call.method_name() == "getPrimaryScreenRect") {
+                int pw = GetSystemMetrics(SM_CXSCREEN);
+                int ph = GetSystemMetrics(SM_CYSCREEN);
+                flutter::EncodableMap rect = {
+                    {flutter::EncodableValue("x"), flutter::EncodableValue(0)},
+                    {flutter::EncodableValue("y"), flutter::EncodableValue(0)},
+                    {flutter::EncodableValue("width"), flutter::EncodableValue(pw)},
+                    {flutter::EncodableValue("height"), flutter::EncodableValue(ph)},
+                };
+                result->Success(flutter::EncodableValue(rect));
             } else {
                 result->NotImplemented();
             }
