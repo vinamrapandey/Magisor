@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -32,6 +33,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   bool _isAsking = false;
   MagisorResponse? _result;
   SavedItem? _currentEntry;
+  String? _lastCaptureBase64;
+  final List<String> _conversation = [];
 
   int _selectedTab = 0;
 
@@ -46,7 +49,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final shakeService = context.read<ShakeDetectorService>();
       shakeService.onShakeDetected = (x, y) async {
-        await _switchToOverlay(Offset(x, y));
+        // Shake coords are physical pixels; convert to Flutter logical space.
+        final dpr = MediaQuery.of(context).devicePixelRatio;
+        await _switchToOverlay(Offset(x / dpr, y / dpr));
       };
     });
   }
@@ -64,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     Menu menu = Menu(
       items: [
         MenuItem(key: 'dashboard', label: 'Settings & History'),
+        if (kDebugMode) MenuItem(key: 'test_overlay', label: 'Open Overlay (Test)'),
         MenuItem.separator(),
         MenuItem(key: 'exit', label: 'Exit Magisor'),
       ],
@@ -80,6 +86,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   void onTrayMenuItemClick(MenuItem menuItem) {
     if (menuItem.key == 'dashboard') {
       _switchToDashboard();
+    } else if (menuItem.key == 'test_overlay') {
+      _testOverlay();
     } else if (menuItem.key == 'exit') {
       windowManager.destroy();
     }
@@ -140,8 +148,20 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _isAsking = false;
       _result = null;
       _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
     });
     await windowManager.hide();
+  }
+
+  /// Dev/testing helper: open the overlay without a mouse shake (debug only).
+  Future<void> _testOverlay() async {
+    await _switchToOverlay(const Offset(500, 400));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final size = MediaQuery.of(context).size;
+      setState(() => _menuPosition = Offset(size.width / 2, size.height / 2));
+    });
   }
 
   /// Open the free-form "What's on my screen?" input bar.
@@ -151,6 +171,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _isAsking = true;
       _result = null;
       _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
     });
   }
 
@@ -166,6 +188,48 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     }
   }
 
+  /// Continue the conversation about the same captured screen (multi-turn).
+  Future<void> _followUp(String question) async {
+    final image = _lastCaptureBase64;
+    if (image == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final aiProvider = context.read<ProviderRegistry>().active;
+      final storage = context.read<StorageService>();
+
+      _conversation.add('User: $question');
+      final prompt =
+          "Continue this conversation about the user's screen, answering the "
+          "final question.\n\n${_conversation.join('\n')}";
+      final response = await aiProvider.analyzeScreen(image, prompt);
+      _conversation.add('Magisor: ${response.summary}');
+
+      final entry = await storage.addEntry(
+        query: question,
+        summary: response.summary,
+        extractedText: response.extractedText,
+        providerUsed: response.providerUsed,
+      );
+      setState(() {
+        _result = response;
+        _currentEntry = entry;
+      });
+    } catch (e) {
+      setState(() {
+        _result = MagisorResponse(
+          summary: "An error occurred: $e",
+          actions: ["Retry"],
+          extractedText: "",
+          providerUsed: "Error",
+        );
+      });
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   /// Capture the whole screen and answer a free-form question about it.
   Future<void> _submitQuestion(String question) async {
     setState(() {
@@ -174,6 +238,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _isLoading = true;
       _result = null;
       _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
     });
 
     // Let the input bar clear before grabbing the screen.
@@ -184,9 +250,12 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       final aiProvider = context.read<ProviderRegistry>().active;
       final storage = context.read<StorageService>();
 
-      final screenSize = MediaQuery.of(context).size;
-      // Capture the full screen as a single region (known dimensions).
-      final region = Rect.fromLTWH(0, 0, screenSize.width, screenSize.height);
+      final mq = MediaQuery.of(context);
+      // Capture the whole virtual desktop in physical pixels (covers all
+      // monitors and is DPI-correct); fall back to the window's physical size.
+      final region = await captureService.getVirtualScreenRect() ??
+          Rect.fromLTWH(0, 0, mq.size.width * mq.devicePixelRatio,
+              mq.size.height * mq.devicePixelRatio);
 
       final imageBytes = await captureService.captureRegion(region);
       final base64Img = captureService.toBase64Jpeg(
@@ -203,6 +272,11 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       setState(() {
         _result = response;
         _currentEntry = entry;
+        _lastCaptureBase64 = base64Img;
+        _conversation
+          ..clear()
+          ..add('User: $question')
+          ..add('Magisor: ${response.summary}');
       });
     } catch (e) {
       setState(() {
@@ -235,6 +309,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _isLoading = true;
       _result = null;
       _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
     });
 
     // Wait a tiny bit for UI to clear the menu
@@ -245,12 +321,20 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       final aiProvider = context.read<ProviderRegistry>().active;
       final storage = context.read<StorageService>();
 
-      final screenSize = MediaQuery.of(context).size;
-      final region = captureService.regionAroundPoint(center, screenSize);
+      final mq = MediaQuery.of(context);
+      final dpr = mq.devicePixelRatio;
+      final logicalRegion = captureService.regionAroundPoint(center, mq.size);
+      // Native capture works in physical pixels, so scale by the DPR.
+      final region = Rect.fromLTWH(
+        logicalRegion.left * dpr,
+        logicalRegion.top * dpr,
+        logicalRegion.width * dpr,
+        logicalRegion.height * dpr,
+      );
 
-      // Capture from native C++ Hook
       final imageBytes = await captureService.captureRegion(region);
-      final base64Img = captureService.toBase64Jpeg(imageBytes, region.width.toInt(), region.height.toInt());
+      final base64Img = captureService.toBase64Jpeg(
+          imageBytes, region.width.toInt(), region.height.toInt());
 
       final prompt = "Action requested: $action. Analyze the provided screen capture and provide a JSON response following the system prompt.";
       final response = await aiProvider.analyzeScreen(base64Img, prompt);
@@ -264,6 +348,11 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       setState(() {
         _result = response;
         _currentEntry = entry;
+        _lastCaptureBase64 = base64Img;
+        _conversation
+          ..clear()
+          ..add('User: $action')
+          ..add('Magisor: ${response.summary}');
       });
     } catch (e) {
       setState(() {
@@ -288,6 +377,17 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
         title: const Text('Magisor Dashboard'),
         elevation: 0,
         backgroundColor: Colors.transparent,
+        actions: [
+          if (kDebugMode)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: _testOverlay,
+                icon: const Icon(Icons.bolt, size: 18),
+                label: const Text('Test Overlay'),
+              ),
+            ),
+        ],
       ),
       body: Row(
         children: [
@@ -355,6 +455,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
               onFollowUp: _handleAction,
               isSaved: _currentEntry?.saved ?? false,
               onToggleSaved: _currentEntry != null ? _toggleCurrentSaved : null,
+              onAskFollowUp: _lastCaptureBase64 != null ? _followUp : null,
             ),
         ],
       ),

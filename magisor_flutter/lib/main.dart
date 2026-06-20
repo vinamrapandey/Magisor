@@ -7,6 +7,7 @@ import 'core/services/shake_detector_service.dart';
 import 'core/services/capture_service.dart';
 import 'core/services/ocr_service.dart';
 import 'core/services/storage_service.dart';
+import 'core/services/system_service.dart';
 import 'core/providers/provider_registry.dart';
 
 void main() async {
@@ -29,11 +30,12 @@ void main() async {
     MultiProvider(
       providers: [
         Provider(create: (_) => AuthService()),
-        Provider(create: (_) => ShakeDetectorService()..start()),
+        ChangeNotifierProvider(create: (_) => ShakeDetectorService()..start()),
         Provider(create: (_) => CaptureService()),
         Provider(create: (_) => OcrService()),
         ChangeNotifierProvider(create: (_) => ProviderRegistry()..load()),
         ChangeNotifierProvider.value(value: storage),
+        ChangeNotifierProvider(create: (_) => SystemService()..load()),
       ],
       child: const MagisorApp(),
     ),

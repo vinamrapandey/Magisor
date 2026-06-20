@@ -14,6 +14,7 @@ class AIResultOverlay extends StatelessWidget {
   final Function(String followUpText) onFollowUp;
   final bool isSaved;
   final VoidCallback? onToggleSaved;
+  final void Function(String question)? onAskFollowUp;
 
   const AIResultOverlay({
     super.key,
@@ -23,6 +24,7 @@ class AIResultOverlay extends StatelessWidget {
     required this.onFollowUp,
     this.isSaved = false,
     this.onToggleSaved,
+    this.onAskFollowUp,
   });
 
   @override
@@ -145,6 +147,18 @@ class AIResultOverlay extends StatelessWidget {
                     children: result!.actions.map((action) => _buildActionChip(action)).toList(),
                   ),
                 ],
+                if (onAskFollowUp != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.glassSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.glassBorder),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    child: _FollowUpField(onSubmit: onAskFollowUp!),
+                  ),
+                ],
               ],
             ),
           ),
@@ -202,6 +216,61 @@ class AIResultOverlay extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Free-form follow-up input shown under a result, for multi-turn questions.
+class _FollowUpField extends StatefulWidget {
+  final void Function(String question) onSubmit;
+  const _FollowUpField({required this.onSubmit});
+
+  @override
+  State<_FollowUpField> createState() => _FollowUpFieldState();
+}
+
+class _FollowUpFieldState extends State<_FollowUpField> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    widget.onSubmit(text);
+    _controller.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _controller,
+            onSubmitted: (_) => _send(),
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            decoration: const InputDecoration(
+              hintText: 'Ask a follow-up…',
+              hintStyle: TextStyle(color: AppColors.textMuted),
+              isDense: true,
+              border: InputBorder.none,
+            ),
+          ),
+        ),
+        InkWell(
+          onTap: _send,
+          borderRadius: BorderRadius.circular(20),
+          child: const Padding(
+            padding: EdgeInsets.all(6),
+            child: Icon(Icons.send, size: 18, color: AppColors.accentViolet),
+          ),
+        ),
+      ],
     );
   }
 }

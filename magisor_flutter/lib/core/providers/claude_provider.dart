@@ -12,7 +12,8 @@ class ClaudeProvider extends AIProvider {
   String get providerName => 'Claude';
 
   @override
-  String get modelId => 'claude-opus-4-8';
+  List<String> get availableModels =>
+      const ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'];
 
   @override
   bool get supportsVision => true;

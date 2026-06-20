@@ -8,7 +8,8 @@ class GeminiProvider extends AIProvider {
   String get providerName => 'Gemini';
 
   @override
-  String get modelId => 'gemini-2.0-flash';
+  List<String> get availableModels =>
+      const ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
 
   @override
   bool get supportsVision => true;

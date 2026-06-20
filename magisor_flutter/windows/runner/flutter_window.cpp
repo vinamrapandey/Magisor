@@ -8,6 +8,7 @@
 #include <vector>
 #include <chrono>
 #include <cmath>
+#include <string>
 
 static HHOOK g_mouseHook = NULL;
 static FlutterWindow* g_flutterWindow = nullptr;
@@ -268,6 +269,72 @@ void FlutterWindow::SetupChannels() {
                 result->Success(flutter::EncodableValue(buffer));
             } else if (call.method_name() == "captureFullScreen") {
                 result->Success();
+            } else if (call.method_name() == "getVirtualScreenRect") {
+                // Physical-pixel bounds of the whole virtual desktop (all
+                // monitors). Per-Monitor-V2 DPI aware, so these are real pixels.
+                int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+                int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+                int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                flutter::EncodableMap rect = {
+                    {flutter::EncodableValue("x"), flutter::EncodableValue(vx)},
+                    {flutter::EncodableValue("y"), flutter::EncodableValue(vy)},
+                    {flutter::EncodableValue("width"), flutter::EncodableValue(vw)},
+                    {flutter::EncodableValue("height"), flutter::EncodableValue(vh)},
+                };
+                result->Success(flutter::EncodableValue(rect));
+            } else {
+                result->NotImplemented();
+            }
+        });
+
+    system_channel_ =
+        std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+            messenger, "magisor/system",
+            &flutter::StandardMethodCodec::GetInstance());
+
+    system_channel_->SetMethodCallHandler(
+        [](const flutter::MethodCall<flutter::EncodableValue>& call,
+           std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+            const wchar_t* runKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+            const wchar_t* valueName = L"Magisor";
+
+            if (call.method_name() == "setLaunchAtStartup") {
+                bool enabled = false;
+                const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+                if (args) {
+                    auto it = args->find(flutter::EncodableValue("enabled"));
+                    if (it != args->end() && std::holds_alternative<bool>(it->second)) {
+                        enabled = std::get<bool>(it->second);
+                    }
+                }
+                HKEY hKey;
+                if (RegOpenKeyExW(HKEY_CURRENT_USER, runKey, 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+                    if (enabled) {
+                        wchar_t exePath[MAX_PATH];
+                        DWORD len = GetModuleFileNameW(NULL, exePath, MAX_PATH);
+                        std::wstring quoted = L"\"" + std::wstring(exePath, len) + L"\"";
+                        RegSetValueExW(hKey, valueName, 0, REG_SZ,
+                                       reinterpret_cast<const BYTE*>(quoted.c_str()),
+                                       (DWORD)((quoted.size() + 1) * sizeof(wchar_t)));
+                    } else {
+                        RegDeleteValueW(hKey, valueName);
+                    }
+                    RegCloseKey(hKey);
+                    result->Success(flutter::EncodableValue(enabled));
+                } else {
+                    result->Error("registry_error", "Could not open Run registry key");
+                }
+            } else if (call.method_name() == "isLaunchAtStartup") {
+                HKEY hKey;
+                bool exists = false;
+                if (RegOpenKeyExW(HKEY_CURRENT_USER, runKey, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
+                    if (RegQueryValueExW(hKey, valueName, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
+                        exists = true;
+                    }
+                    RegCloseKey(hKey);
+                }
+                result->Success(flutter::EncodableValue(exists));
             } else {
                 result->NotImplemented();
             }
