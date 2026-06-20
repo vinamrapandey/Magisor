@@ -13,6 +13,7 @@ import '../../core/services/storage_service.dart';
 import '../widgets/pie_menu.dart';
 import '../widgets/ai_result_overlay.dart';
 import '../widgets/ask_bar.dart';
+import '../widgets/region_selector.dart';
 import 'settings/settings_screen.dart';
 import 'history_screen.dart';
 import 'saved_screen.dart';
@@ -35,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   SavedItem? _currentEntry;
   String? _lastCaptureBase64;
   final List<String> _conversation = [];
+  bool _isSelecting = false;
 
   int _selectedTab = 0;
 
@@ -146,6 +148,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     setState(() {
       _menuPosition = null;
       _isAsking = false;
+      _isSelecting = false;
       _result = null;
       _currentEntry = null;
       _lastCaptureBase64 = null;
@@ -169,6 +172,18 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     setState(() {
       _menuPosition = null;
       _isAsking = true;
+      _result = null;
+      _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
+    });
+  }
+
+  /// Enter region-selection ("Circle to Search") mode.
+  void _startRegionSelect() {
+    setState(() {
+      _menuPosition = null;
+      _isSelecting = true;
       _result = null;
       _currentEntry = null;
       _lastCaptureBase64 = null;
@@ -227,6 +242,80 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       });
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  /// Handle a region drawn in "Circle to Search" mode.
+  Future<void> _onRegionSelected(Rect logicalRect) async {
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    if (logicalRect.width < 8 || logicalRect.height < 8) {
+      setState(() => _isSelecting = false);
+      return;
+    }
+    setState(() {
+      _isSelecting = false;
+      _isLoading = true;
+      _result = null;
+      _currentEntry = null;
+      _lastCaptureBase64 = null;
+      _conversation.clear();
+    });
+    // Let the selection overlay clear before capturing.
+    await Future.delayed(const Duration(milliseconds: 60));
+    final physical = Rect.fromLTWH(
+      logicalRect.left * dpr,
+      logicalRect.top * dpr,
+      logicalRect.width * dpr,
+      logicalRect.height * dpr,
+    );
+    await _analyzeRegion(
+      physical,
+      query: 'Circle to Search',
+      prompt: "The user selected a specific region of their screen. Identify, "
+          "explain, or search what it contains, and respond following the "
+          "system prompt JSON format.",
+    );
+  }
+
+  /// Capture a physical-pixel region, analyze it, and show the result.
+  Future<void> _analyzeRegion(Rect physicalRegion,
+      {required String query, required String prompt}) async {
+    final captureService = context.read<CaptureService>();
+    final aiProvider = context.read<ProviderRegistry>().active;
+    final storage = context.read<StorageService>();
+    try {
+      final bytes = await captureService.captureRegion(physicalRegion);
+      final b64 = captureService.toBase64Jpeg(
+          bytes, physicalRegion.width.toInt(), physicalRegion.height.toInt());
+      final response = await aiProvider.analyzeScreen(b64, prompt);
+      final entry = await storage.addEntry(
+        query: query,
+        summary: response.summary,
+        extractedText: response.extractedText,
+        providerUsed: response.providerUsed,
+      );
+      if (!mounted) return;
+      setState(() {
+        _result = response;
+        _currentEntry = entry;
+        _lastCaptureBase64 = b64;
+        _conversation
+          ..clear()
+          ..add('User: $query')
+          ..add('Magisor: ${response.summary}');
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _result = MagisorResponse(
+          summary: "An error occurred: $e",
+          actions: ["Retry"],
+          extractedText: "",
+          providerUsed: "Error",
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -435,6 +524,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
               onClose: _closeOverlay,
               items: [
                 PieMenuItem(icon: Icons.chat_bubble_outline, label: "Ask", onTap: _startAsk),
+                PieMenuItem(icon: Icons.crop_free, label: "Select", onTap: _startRegionSelect),
                 PieMenuItem(icon: Icons.auto_awesome, label: "Summarize", onTap: () => _handleAction("Summarize")),
                 PieMenuItem(icon: Icons.lightbulb_outline, label: "Explain", onTap: () => _handleAction("Explain")),
                 PieMenuItem(icon: Icons.translate, label: "Translate", onTap: () => _handleAction("Translate")),
@@ -446,6 +536,13 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
             AskBar(
               onSubmit: _submitQuestion,
               onCancel: _closeOverlay,
+            ),
+          if (_isSelecting)
+            Positioned.fill(
+              child: RegionSelector(
+                onSelected: _onRegionSelected,
+                onCancel: _closeOverlay,
+              ),
             ),
           if (_isLoading || _result != null)
             AIResultOverlay(
