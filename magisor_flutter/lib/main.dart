@@ -29,7 +29,7 @@ void main() async {
     MultiProvider(
       providers: [
         Provider(create: (_) => AuthService()),
-        Provider(create: (_) => ShakeDetectorService()..start()),
+        ChangeNotifierProvider(create: (_) => ShakeDetectorService()..start()),
         Provider(create: (_) => CaptureService()),
         Provider(create: (_) => OcrService()),
         ChangeNotifierProvider(create: (_) => ProviderRegistry()..load()),
