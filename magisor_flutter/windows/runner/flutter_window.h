@@ -29,6 +29,7 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> mouse_hook_channel_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> capture_channel_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> system_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> ocr_channel_;
 
   void StartMouseHook(int sensitivity);
   void StopMouseHook();

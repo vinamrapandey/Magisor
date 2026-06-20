@@ -1,32 +1,47 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'dart:io' show Platform;
 
+/// One recognized word and its bounding box, in the captured image's physical
+/// pixels.
+class WordBox {
+  final String text;
+  final Rect rect;
+  const WordBox(this.text, this.rect);
+}
+
+/// On-device OCR. On Windows this is backed by the native `Windows.Media.Ocr`
+/// engine over the `magisor/ocr` method channel (see flutter_window.cpp).
 class OcrService {
   static const MethodChannel _channel = MethodChannel('magisor/ocr');
-  final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
 
-  Future<String> extractText(Uint8List imageBytes) async {
-    if (imageBytes.isEmpty) return '';
-    
+  /// Recognizes words in raw BGRA [bgra] bytes of the given size. Returns the
+  /// word boxes, or an empty list if OCR is unavailable / failed.
+  Future<List<WordBox>> recognize(Uint8List bgra, int width, int height) async {
+    if (bgra.isEmpty || width <= 0 || height <= 0) return const [];
     try {
-      if (Platform.isAndroid || Platform.isIOS) {
-        // Mobile ML Kit Implementation
-        // In a full implementation, bytes are written to a temp file and fed to InputImage.
-        return 'Mobile ML Kit OCR Pending';
-      } else {
-        // Desktop Native Channels (Windows Media OCR / Apple Vision)
-        final String result = await _channel.invokeMethod('extractText', {'bytes': imageBytes});
-        return result;
+      final res = await _channel.invokeMethod('recognize', {
+        'bytes': bgra,
+        'width': width,
+        'height': height,
+      });
+      if (res is List) {
+        return res.map((e) {
+          final m = e as Map;
+          return WordBox(
+            (m['text'] ?? '') as String,
+            Rect.fromLTWH(
+              (m['x'] as num).toDouble(),
+              (m['y'] as num).toDouble(),
+              (m['w'] as num).toDouble(),
+              (m['h'] as num).toDouble(),
+            ),
+          );
+        }).toList();
       }
     } catch (e) {
-      print("OCR Error: $e");
-      return '';
+      debugPrint('OCR failed: $e');
     }
-  }
-
-  void dispose() {
-    _textRecognizer.close();
+    return const [];
   }
 }

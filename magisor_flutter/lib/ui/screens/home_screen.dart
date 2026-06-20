@@ -10,6 +10,7 @@ import '../../core/models/magisor_response.dart';
 import '../../core/models/saved_item.dart';
 import '../../core/providers/provider_registry.dart';
 import '../../core/services/capture_service.dart';
+import '../../core/services/ocr_service.dart';
 import '../../core/services/shake_detector_service.dart';
 import '../../core/services/storage_service.dart';
 import '../widgets/pie_menu.dart';
@@ -43,6 +44,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   // The frozen screenshot shown under the overlay, and its physical bounds.
   Uint8List? _frozenJpeg;
   Rect? _frozenRect;
+  // OCR word boxes for the frozen screenshot (used by Phase 3 text selection).
+  List<WordBox> _wordBoxes = const [];
 
   int _selectedTab = 0;
 
@@ -141,6 +144,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   /// position); null centers the menu (test trigger).
   Future<void> _invokeOverlay({Offset? physicalPoint}) async {
     final captureService = context.read<CaptureService>();
+    final ocrService = context.read<OcrService>();
     final dpr = MediaQuery.of(context).devicePixelRatio;
 
     // Make sure no Magisor window is in the screenshot.
@@ -152,9 +156,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     // Freeze the primary monitor.
     final rect = await captureService.getPrimaryScreenRect();
     Uint8List? jpeg;
+    Uint8List? bgra;
     if (rect != null) {
-      final bytes = await captureService.captureRegion(rect);
-      jpeg = captureService.jpegBytes(bytes, rect.width.toInt(), rect.height.toInt());
+      bgra = await captureService.captureRegion(rect);
+      jpeg = captureService.jpegBytes(bgra, rect.width.toInt(), rect.height.toInt());
       if (jpeg.isEmpty) jpeg = null;
     }
 
@@ -179,9 +184,22 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _currentEntry = null;
       _lastCaptureBase64 = null;
       _conversation.clear();
+      _wordBoxes = const [];
     });
 
     await _showOverlayWindow();
+
+    // Phase 2: OCR the frozen screenshot in the background; Phase 3 will use the
+    // word boxes for text selection. Fire-and-forget — it doesn't block the UI.
+    if (rect != null && bgra != null && bgra.isNotEmpty) {
+      ocrService
+          .recognize(bgra, rect.width.toInt(), rect.height.toInt())
+          .then((boxes) {
+        if (!mounted) return;
+        debugPrint('OCR: ${boxes.length} words recognized');
+        setState(() => _wordBoxes = boxes);
+      });
+    }
   }
 
   Future<void> _closeOverlay() async {
@@ -195,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _conversation.clear();
       _frozenJpeg = null;
       _frozenRect = null;
+      _wordBoxes = const [];
     });
     await windowManager.hide();
   }
