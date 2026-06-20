@@ -54,15 +54,17 @@ class StorageService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addEntry({
+  /// Inserts an entry and returns the stored [SavedItem] (with its id), or null
+  /// if the database is unavailable.
+  Future<SavedItem?> addEntry({
     required String query,
     required String summary,
     required String extractedText,
     required String providerUsed,
   }) async {
     final db = _db;
-    if (db == null) return;
-    await db.insert('entries', {
+    if (db == null) return null;
+    final id = await db.insert('entries', {
       'query': query,
       'summary': summary,
       'extracted_text': extractedText,
@@ -71,6 +73,8 @@ class StorageService extends ChangeNotifier {
       'saved': 0,
     });
     await _reload();
+    final match = _items.where((e) => e.id == id);
+    return match.isNotEmpty ? match.first : null;
   }
 
   Future<void> toggleSaved(SavedItem item) async {
