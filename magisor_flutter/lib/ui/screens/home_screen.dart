@@ -89,6 +89,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       ],
     );
     await trayManager.setContextMenu(menu);
+    // Start silently in the system tray; the app lives in the background and
+    // is summoned by shaking. Open Settings/History from the tray icon.
+    await windowManager.hide();
   }
 
   @override
@@ -682,7 +685,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
   Widget _buildOverlay() {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           if (_frozenJpeg != null)

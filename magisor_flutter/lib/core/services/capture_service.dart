@@ -76,11 +76,18 @@ class CaptureService {
   /// display via [Image.memory].
   Uint8List jpegBytes(Uint8List bgraBytes, int width, int height) {
     if (bgraBytes.isEmpty) return Uint8List(0);
-    // Native C++ code returns raw BGRA bytes using BitBlt and GetDIBits.
+    // Native BitBlt leaves the alpha byte as 0, which makes the encoder treat
+    // the screenshot as fully transparent (washed out / pink bleed-through).
+    // Work on a clean 0-offset copy and force every alpha byte to opaque.
+    final bytes = Uint8List.fromList(bgraBytes);
+    for (var i = 3; i < bytes.length; i += 4) {
+      bytes[i] = 255;
+    }
     final image = img.Image.fromBytes(
       width: width,
       height: height,
-      bytes: bgraBytes.buffer,
+      bytes: bytes.buffer,
+      numChannels: 4,
       order: img.ChannelOrder.bgra,
     );
     return img.encodeJpg(image, quality: 85);
