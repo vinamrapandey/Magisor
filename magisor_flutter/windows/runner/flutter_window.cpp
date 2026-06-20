@@ -268,6 +268,20 @@ void FlutterWindow::SetupChannels() {
                 result->Success(flutter::EncodableValue(buffer));
             } else if (call.method_name() == "captureFullScreen") {
                 result->Success();
+            } else if (call.method_name() == "getVirtualScreenRect") {
+                // Physical-pixel bounds of the whole virtual desktop (all
+                // monitors). Per-Monitor-V2 DPI aware, so these are real pixels.
+                int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+                int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+                int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                flutter::EncodableMap rect = {
+                    {flutter::EncodableValue("x"), flutter::EncodableValue(vx)},
+                    {flutter::EncodableValue("y"), flutter::EncodableValue(vy)},
+                    {flutter::EncodableValue("width"), flutter::EncodableValue(vw)},
+                    {flutter::EncodableValue("height"), flutter::EncodableValue(vh)},
+                };
+                result->Success(flutter::EncodableValue(rect));
             } else {
                 result->NotImplemented();
             }

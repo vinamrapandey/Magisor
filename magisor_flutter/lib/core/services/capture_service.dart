@@ -7,6 +7,27 @@ import 'package:image/image.dart' as img;
 class CaptureService {
   static const MethodChannel _channel = MethodChannel('magisor/capture');
 
+  /// Physical-pixel bounds of the whole virtual desktop (spans every monitor).
+  /// Returns null if the native side is unavailable.
+  Future<Rect?> getVirtualScreenRect() async {
+    try {
+      final r = await _channel.invokeMethod('getVirtualScreenRect');
+      if (r is Map) {
+        return Rect.fromLTWH(
+          (r['x'] as num).toDouble(),
+          (r['y'] as num).toDouble(),
+          (r['width'] as num).toDouble(),
+          (r['height'] as num).toDouble(),
+        );
+      }
+    } catch (e) {
+      debugPrint('Warning: getVirtualScreenRect failed: $e');
+    }
+    return null;
+  }
+
+  /// Captures a region given in **physical** screen pixels (matching the
+  /// native low-level mouse hook coordinates and DPI-aware screen metrics).
   Future<Uint8List> captureRegion(Rect region) async {
     try {
       final result = await _channel.invokeMethod('captureRegion', {

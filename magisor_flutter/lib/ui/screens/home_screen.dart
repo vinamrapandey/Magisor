@@ -47,7 +47,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final shakeService = context.read<ShakeDetectorService>();
       shakeService.onShakeDetected = (x, y) async {
-        await _switchToOverlay(Offset(x, y));
+        // Shake coords are physical pixels; convert to Flutter logical space.
+        final dpr = MediaQuery.of(context).devicePixelRatio;
+        await _switchToOverlay(Offset(x / dpr, y / dpr));
       };
     });
   }
@@ -198,9 +200,12 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       final aiProvider = context.read<ProviderRegistry>().active;
       final storage = context.read<StorageService>();
 
-      final screenSize = MediaQuery.of(context).size;
-      // Capture the full screen as a single region (known dimensions).
-      final region = Rect.fromLTWH(0, 0, screenSize.width, screenSize.height);
+      final mq = MediaQuery.of(context);
+      // Capture the whole virtual desktop in physical pixels (covers all
+      // monitors and is DPI-correct); fall back to the window's physical size.
+      final region = await captureService.getVirtualScreenRect() ??
+          Rect.fromLTWH(0, 0, mq.size.width * mq.devicePixelRatio,
+              mq.size.height * mq.devicePixelRatio);
 
       final imageBytes = await captureService.captureRegion(region);
       final base64Img = captureService.toBase64Jpeg(
@@ -259,12 +264,20 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       final aiProvider = context.read<ProviderRegistry>().active;
       final storage = context.read<StorageService>();
 
-      final screenSize = MediaQuery.of(context).size;
-      final region = captureService.regionAroundPoint(center, screenSize);
+      final mq = MediaQuery.of(context);
+      final dpr = mq.devicePixelRatio;
+      final logicalRegion = captureService.regionAroundPoint(center, mq.size);
+      // Native capture works in physical pixels, so scale by the DPR.
+      final region = Rect.fromLTWH(
+        logicalRegion.left * dpr,
+        logicalRegion.top * dpr,
+        logicalRegion.width * dpr,
+        logicalRegion.height * dpr,
+      );
 
-      // Capture from native C++ Hook
       final imageBytes = await captureService.captureRegion(region);
-      final base64Img = captureService.toBase64Jpeg(imageBytes, region.width.toInt(), region.height.toInt());
+      final base64Img = captureService.toBase64Jpeg(
+          imageBytes, region.width.toInt(), region.height.toInt());
 
       final prompt = "Action requested: $action. Analyze the provided screen capture and provide a JSON response following the system prompt.";
       final response = await aiProvider.analyzeScreen(base64Img, prompt);
