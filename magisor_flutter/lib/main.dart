@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:window_manager/window_manager.dart';
 import 'app.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/shake_detector_service.dart';
@@ -12,6 +13,9 @@ import 'core/providers/provider_registry.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Required before any windowManager.* call works (maximize/setBounds/center
+  // silently no-op without it).
+  await windowManager.ensureInitialized();
 
   try {
     await Firebase.initializeApp();

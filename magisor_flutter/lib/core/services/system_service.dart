@@ -1,3 +1,4 @@
+import 'dart:ui' show Offset;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -18,6 +19,19 @@ class SystemService extends ChangeNotifier {
     } catch (e) {
       debugPrint('isLaunchAtStartup failed: $e');
     }
+  }
+
+  /// Current mouse cursor position in physical screen pixels, or null.
+  Future<Offset?> getCursorPos() async {
+    try {
+      final r = await _channel.invokeMethod('getCursorPos');
+      if (r is Map) {
+        return Offset((r['x'] as num).toDouble(), (r['y'] as num).toDouble());
+      }
+    } catch (e) {
+      debugPrint('getCursorPos failed: $e');
+    }
+    return null;
   }
 
   Future<void> setLaunchAtStartup(bool enabled) async {

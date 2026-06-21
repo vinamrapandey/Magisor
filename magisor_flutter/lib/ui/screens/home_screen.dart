@@ -16,6 +16,7 @@ import '../../core/services/capture_service.dart';
 import '../../core/services/ocr_service.dart';
 import '../../core/services/shake_detector_service.dart';
 import '../../core/services/storage_service.dart';
+import '../../core/services/system_service.dart';
 import '../widgets/pie_menu.dart';
 import '../widgets/ai_result_overlay.dart';
 import '../widgets/ask_bar.dart';
@@ -244,9 +245,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     await windowManager.hide();
   }
 
-  /// Dev/testing helper: open the overlay without a mouse shake (debug only).
+  /// Dev/testing helper: open the overlay at the current cursor (debug only).
   Future<void> _testOverlay() async {
-    await _invokeOverlay();
+    final pos = await context.read<SystemService>().getCursorPos();
+    await _invokeOverlay(physicalPoint: pos);
   }
 
   /// Maps a rect in overlay-logical coordinates to the frozen image's physical

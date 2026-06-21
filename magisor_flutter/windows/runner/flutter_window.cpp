@@ -447,6 +447,14 @@ void FlutterWindow::SetupChannels() {
                     RegCloseKey(hKey);
                 }
                 result->Success(flutter::EncodableValue(exists));
+            } else if (call.method_name() == "getCursorPos") {
+                POINT p;
+                GetCursorPos(&p);
+                flutter::EncodableMap m = {
+                    {flutter::EncodableValue("x"), flutter::EncodableValue((double)p.x)},
+                    {flutter::EncodableValue("y"), flutter::EncodableValue((double)p.y)},
+                };
+                result->Success(flutter::EncodableValue(m));
             } else {
                 result->NotImplemented();
             }
