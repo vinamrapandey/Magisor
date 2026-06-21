@@ -138,9 +138,9 @@ static LRESULT CALLBACK MouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
             } else {
                 int dx = x - g_anchorX;
                 
-                int minDistance = 50; 
-                if (g_sensitivity == 0) minDistance = 100;
-                else if (g_sensitivity == 2) minDistance = 25;
+                int minDistance = 110;
+                if (g_sensitivity == 0) minDistance = 180;
+                else if (g_sensitivity == 2) minDistance = 60;
 
                 if (std::abs(dx) > minDistance) {
                     int newDirection = dx > 0 ? 1 : -1;
@@ -154,9 +154,9 @@ static LRESULT CALLBACK MouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
                     g_lastDirection = newDirection;
                     g_anchorX = x; // Reset anchor
 
-                    int requiredReversals = 4;
-                    if (g_sensitivity == 0) requiredReversals = 5;
-                    else if (g_sensitivity == 2) requiredReversals = 3;
+                    int requiredReversals = 5;
+                    if (g_sensitivity == 0) requiredReversals = 6;
+                    else if (g_sensitivity == 2) requiredReversals = 4;
 
                     if (g_reversals >= requiredReversals) {
                         g_lastTriggerTime = now;
@@ -447,6 +447,14 @@ void FlutterWindow::SetupChannels() {
                     RegCloseKey(hKey);
                 }
                 result->Success(flutter::EncodableValue(exists));
+            } else if (call.method_name() == "getCursorPos") {
+                POINT p;
+                GetCursorPos(&p);
+                flutter::EncodableMap m = {
+                    {flutter::EncodableValue("x"), flutter::EncodableValue((double)p.x)},
+                    {flutter::EncodableValue("y"), flutter::EncodableValue((double)p.y)},
+                };
+                result->Success(flutter::EncodableValue(m));
             } else {
                 result->NotImplemented();
             }

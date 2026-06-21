@@ -17,7 +17,7 @@ class ShakeDetectorService extends ChangeNotifier {
   bool _isListening = false;
   Function(double x, double y)? onShakeDetected;
 
-  ShakeSensitivity _sensitivity = ShakeSensitivity.medium;
+  ShakeSensitivity _sensitivity = ShakeSensitivity.low;
   ShakeSensitivity get sensitivity => _sensitivity;
 
   Future<void> start() async {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +16,7 @@ import '../../core/services/capture_service.dart';
 import '../../core/services/ocr_service.dart';
 import '../../core/services/shake_detector_service.dart';
 import '../../core/services/storage_service.dart';
+import '../../core/services/system_service.dart';
 import '../widgets/pie_menu.dart';
 import '../widgets/ai_result_overlay.dart';
 import '../widgets/ask_bar.dart';
@@ -46,7 +48,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   bool _isTextSelecting = false;
 
   // The frozen screenshot shown under the overlay, and its physical bounds.
-  Uint8List? _frozenJpeg;
+  Uint8List? _frozenJpeg; // for AI / cropping
+  ui.Image? _frozenImage; // for display (RawImage)
   Rect? _frozenRect;
   // OCR word boxes for the frozen screenshot (used by Phase 3 text selection).
   List<WordBox> _wordBoxes = const [];
@@ -89,6 +92,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       ],
     );
     await trayManager.setContextMenu(menu);
+    // Start silently in the system tray; the app lives in the background and
+    // is summoned by shaking. Open Settings/History from the tray icon.
+    await windowManager.hide();
   }
 
   @override
@@ -116,29 +122,34 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   }
 
   Future<void> _switchToDashboard() async {
-    await windowManager.unmaximize();
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
     await windowManager.setHasShadow(true);
     await windowManager.setAlwaysOnTop(false);
     await windowManager.setSize(const Size(900, 700));
-    await windowManager.center();
-    
+    // Show before center(): center() reads the window bounds, which return
+    // null (and crash) when the window is still hidden.
+    await windowManager.show();
+    await windowManager.focus();
+    try {
+      await windowManager.center();
+    } catch (_) {}
+
     setState(() {
       _currentMode = AppMode.dashboard;
       _menuPosition = null;
       _result = null;
     });
-    
-    await windowManager.show();
-    await windowManager.focus();
   }
 
-  /// Brings the window forward as a frameless, always-on-top fullscreen overlay.
-  Future<void> _showOverlayWindow() async {
+  /// Brings the window forward as a frameless, always-on-top overlay covering
+  /// the whole monitor. Uses setBounds (deterministic) rather than maximize(),
+  /// which silently fails for a frameless/hidden window.
+  Future<void> _showOverlayWindow(Size logicalSize) async {
     await windowManager.setAsFrameless();
     await windowManager.setHasShadow(false);
     await windowManager.setAlwaysOnTop(true);
-    await windowManager.maximize();
+    await windowManager.setBounds(
+        Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
     await windowManager.show();
     await windowManager.focus();
   }
@@ -161,11 +172,19 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     final rect = await captureService.getPrimaryScreenRect();
     Uint8List? jpeg;
     Uint8List? bgra;
+    ui.Image? frozenImage;
     if (rect != null) {
       bgra = await captureService.captureRegion(rect);
       jpeg = captureService.jpegBytes(bgra, rect.width.toInt(), rect.height.toInt());
       if (jpeg.isEmpty) jpeg = null;
+      if (bgra.isNotEmpty) {
+        frozenImage = await captureService.decodeBgra(
+            bgra, rect.width.toInt(), rect.height.toInt());
+      }
     }
+    // Full-monitor bounds in logical pixels (physical / device pixel ratio).
+    final logicalSize =
+        rect != null ? Size(rect.width / dpr, rect.height / dpr) : const Size(1280, 720);
 
     // Logical menu position.
     final Offset menuPos;
@@ -180,6 +199,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     setState(() {
       _currentMode = AppMode.overlay;
       _frozenJpeg = jpeg;
+      _frozenImage = frozenImage;
       _frozenRect = rect;
       _menuPosition = menuPos;
       _isAsking = false;
@@ -192,7 +212,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _wordBoxes = const [];
     });
 
-    await _showOverlayWindow();
+    await _showOverlayWindow(logicalSize);
 
     // Phase 2: OCR the frozen screenshot in the background; Phase 3 will use the
     // word boxes for text selection. Fire-and-forget — it doesn't block the UI.
@@ -218,15 +238,17 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       _conversation.clear();
       _isTextSelecting = false;
       _frozenJpeg = null;
+      _frozenImage = null;
       _frozenRect = null;
       _wordBoxes = const [];
     });
     await windowManager.hide();
   }
 
-  /// Dev/testing helper: open the overlay without a mouse shake (debug only).
+  /// Dev/testing helper: open the overlay at the current cursor (debug only).
   Future<void> _testOverlay() async {
-    await _invokeOverlay();
+    final pos = await context.read<SystemService>().getCursorPos();
+    await _invokeOverlay(physicalPoint: pos);
   }
 
   /// Maps a rect in overlay-logical coordinates to the frozen image's physical
@@ -682,16 +704,12 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
   Widget _buildOverlay() {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          if (_frozenJpeg != null)
+          if (_frozenImage != null)
             Positioned.fill(
-              child: Image.memory(
-                _frozenJpeg!,
-                fit: BoxFit.fill,
-                gaplessPlayback: true,
-              ),
+              child: RawImage(image: _frozenImage, fit: BoxFit.fill),
             ),
           if (_menuPosition != null)
             PieMenu(

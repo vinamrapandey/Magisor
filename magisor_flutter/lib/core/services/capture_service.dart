@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
@@ -76,14 +78,28 @@ class CaptureService {
   /// display via [Image.memory].
   Uint8List jpegBytes(Uint8List bgraBytes, int width, int height) {
     if (bgraBytes.isEmpty) return Uint8List(0);
-    // Native C++ code returns raw BGRA bytes using BitBlt and GetDIBits.
+    // Native C++ returns raw BGRA bytes (BitBlt + GetDIBits). Use a clean
+    // 0-offset copy so the image package reads the right bytes.
     final image = img.Image.fromBytes(
       width: width,
       height: height,
-      bytes: bgraBytes.buffer,
+      bytes: Uint8List.fromList(bgraBytes).buffer,
       order: img.ChannelOrder.bgra,
     );
     return img.encodeJpg(image, quality: 85);
+  }
+
+  /// Decodes raw BGRA bytes straight to a [ui.Image] for display (no JPEG
+  /// round-trip). Forces alpha opaque, since BitBlt leaves it at 0.
+  Future<ui.Image> decodeBgra(Uint8List bgraBytes, int width, int height) {
+    final bytes = Uint8List.fromList(bgraBytes);
+    for (var i = 3; i < bytes.length; i += 4) {
+      bytes[i] = 255;
+    }
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      bytes, width, height, ui.PixelFormat.bgra8888, completer.complete);
+    return completer.future;
   }
 
   String toBase64Jpeg(Uint8List bgraBytes, int width, int height) {
