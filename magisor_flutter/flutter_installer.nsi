@@ -3,7 +3,7 @@
 
 !define APPNAME    "Magisor"
 !define COMPANYNAME "Vinamra Pandey"
-!define VERSION    "1.5.0"
+!define VERSION    "1.6.0"
 !define EXENAME    "magisor_flutter.exe"
 !define RELEASEDIR "build\windows\x64\runner\Release"
 !define UNINSTKEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
@@ -14,7 +14,7 @@ InstallDir "$PROGRAMFILES64\${APPNAME}"
 InstallDirRegKey HKLM "Software\${APPNAME}" "InstallDir"
 RequestExecutionLevel admin
 
-VIProductVersion "1.5.0.0"
+VIProductVersion "1.6.0.0"
 VIAddVersionKey "ProductName"     "${APPNAME}"
 VIAddVersionKey "FileVersion"     "${VERSION}"
 VIAddVersionKey "ProductVersion"  "${VERSION}"

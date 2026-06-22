@@ -1,13 +1,14 @@
 import 'dart:math';
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class PieMenuItem {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final Color? color;
 
-  PieMenuItem({required this.icon, required this.label, required this.onTap});
+  PieMenuItem({required this.icon, required this.label, required this.onTap, this.color});
 }
 
 class PieMenu extends StatefulWidget {
@@ -28,11 +29,7 @@ class PieMenu extends StatefulWidget {
 
 class _PieMenuState extends State<PieMenu> {
   int? _hoveredIndex;
-  
-  final double baseInnerRadius = 50.0;
-  final double baseOuterRadius = 150.0;
-  final double hoveredOuterRadius = 175.0;
-  
+
   late double screenWidth;
   late double screenHeight;
 
@@ -51,8 +48,8 @@ class _PieMenuState extends State<PieMenu> {
   void _calculateOrientation() {
     double x = widget.centerPosition.dx;
     double y = widget.centerPosition.dy;
-    double r = hoveredOuterRadius;
-    
+    const r = 140.0; // approx ring + chip half-size
+
     bool canFitRight = (x + r < screenWidth) && (y - r > 0) && (y + r < screenHeight);
     bool canFitLeft = (x - r > 0) && (y - r > 0) && (y + r < screenHeight);
     bool canFitBottom = (y + r < screenHeight) && (x - r > 0) && (x + r < screenWidth);
@@ -73,108 +70,89 @@ class _PieMenuState extends State<PieMenu> {
 
   @override
   Widget build(BuildContext context) {
-    int count = widget.items.length;
-    double totalSweep = pi;
-    double sliceSweep = totalSweep / count;
-    double gap = 0.05;
+    final n = widget.items.length;
+    const ringRadius = 90.0;
+    const chipSize = 46.0;
+    // Spread items over a 270° arc starting from _baseRotation.
+    const arc = pi * 1.5;
+    final startAngle = _baseRotation - arc / 2;
+    final step = n > 1 ? arc / (n - 1) : 0.0;
 
-    List<Widget> children = [];
-    
-    for (int i = 0; i < count; i++) {
-      double startAngle = _baseRotation + (i * sliceSweep) + (gap / 2);
-      double activeSweep = sliceSweep - gap;
-      bool isHovered = _hoveredIndex == i;
-      double outerR = isHovered ? hoveredOuterRadius : baseOuterRadius;
+    final children = <Widget>[
+      Positioned.fill(
+        child: GestureDetector(
+          onTap: widget.onClose,
+          behavior: HitTestBehavior.opaque,
+          // Slight dim so the cream chips read on any background.
+          child: Container(color: Colors.black.withValues(alpha: 0.18)),
+        ),
+      ),
+    ];
 
-      double midAngle = startAngle + (activeSweep / 2);
-      double iconDist = baseInnerRadius + (baseOuterRadius - baseInnerRadius) * 0.5;
-      if (isHovered) iconDist += 10;
-      
-      double iconX = widget.centerPosition.dx + iconDist * cos(midAngle);
-      double iconY = widget.centerPosition.dy + iconDist * sin(midAngle);
+    for (var i = 0; i < n; i++) {
+      final a = startAngle + i * step;
+      final cx = widget.centerPosition.dx + cos(a) * ringRadius;
+      final cy = widget.centerPosition.dy + sin(a) * ringRadius;
+      final hovered = _hoveredIndex == i;
+      final item = widget.items[i];
+      final accent = item.color ?? AppColors.textPrimary;
 
-      children.add(
-        Positioned.fill(
-          child: ClipPath(
-            clipper: ArcClipper(
-              center: widget.centerPosition,
-              startAngle: startAngle,
-              sweepAngle: activeSweep,
-              innerRadius: baseInnerRadius,
-              outerRadius: outerR,
-            ),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-              child: MouseRegion(
-                onEnter: (_) => setState(() => _hoveredIndex = i),
-                onExit: (_) => setState(() => _hoveredIndex = null),
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
-                    widget.items[i].onTap();
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                    color: Colors.white.withValues(alpha: isHovered ? 0.3 : 0.1),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1),
-                      ),
-                    ),
-                  ),
+      // Chip
+      children.add(Positioned(
+        left: cx - chipSize / 2,
+        top: cy - chipSize / 2,
+        width: chipSize,
+        height: chipSize,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hoveredIndex = i),
+          onExit: (_) => setState(() => _hoveredIndex = null),
+          child: GestureDetector(
+            onTap: item.onTap,
+            child: AnimatedScale(
+              scale: hovered ? 1.1 : 1.0,
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOut,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.backgroundPrimary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Color(0x55000000), blurRadius: 18, offset: Offset(0, 8)),
+                  ],
                 ),
+                child: Icon(item.icon, color: accent, size: 21),
               ),
             ),
           ),
         ),
-      );
-      
-      children.add(
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          left: iconX - 40,
-          top: iconY - (isHovered ? 25 : 15),
-          width: 80,
-          height: 60,
+      ));
+
+      // Label below the chip, only when hovered.
+      if (hovered) {
+        children.add(Positioned(
+          left: cx - 60,
+          top: cy + chipSize / 2 + 4,
+          width: 120,
           child: IgnorePointer(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  widget.items[i].icon, 
-                  color: Colors.black87,
-                  size: isHovered ? 30 : 26,
-                ),
-                if (isHovered)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      widget.items[i].label,
-                      style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-              ],
+            child: Text(
+              item.label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.backgroundPrimary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              ),
             ),
           ),
-        ),
-      );
+        ));
+      }
     }
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: widget.onClose,
-            behavior: HitTestBehavior.opaque,
-            child: Container(color: Colors.transparent),
-          ),
-        ),
-        ...children,
-      ],
-    );
+    return Stack(children: children);
   }
 }
 

@@ -32,7 +32,14 @@ env/
 
 # Environments and secrets
 .env
+*.env
+!.env.example
 settings.json
+
+# Built installers / binaries — distribute these via GitHub Releases, never commit
+*.exe
+*Setup*.exe
+Magisor-*.zip
 
 # IDEs
 .idea/

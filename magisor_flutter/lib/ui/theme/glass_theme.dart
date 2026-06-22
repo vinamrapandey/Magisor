@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
 class GlassTheme {
+  /// Editorial light theme (cream/charcoal). Kept as `darkTheme` for compat.
   static ThemeData get darkTheme {
     return ThemeData(
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.backgroundPrimary,
-      primaryColor: AppColors.accentViolet,
+      primaryColor: AppColors.ink,
       fontFamily: 'Inter',
-      colorScheme: const ColorScheme.dark(
-        primary: AppColors.accentViolet,
-        secondary: AppColors.accentCyan,
+      colorScheme: const ColorScheme.light(
+        primary: AppColors.ink,
+        secondary: AppColors.accentViolet,
         error: AppColors.errorRed,
-        background: AppColors.backgroundPrimary,
         surface: AppColors.glassSurface,
       ),
       textTheme: const TextTheme(
