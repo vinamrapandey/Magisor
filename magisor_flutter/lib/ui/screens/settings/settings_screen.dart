@@ -2,10 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/editorial.dart';
+import '../../../core/providers/ai_provider.dart';
 import '../../../core/providers/provider_registry.dart';
 import '../../../core/services/shake_detector_service.dart';
 import '../../../core/services/system_service.dart';
 import '../onboarding/provider_setup_screen.dart';
+
+/// Accent dot color per AI provider — small visual mnemonic.
+const _providerAccents = {
+  'Gemini': AppColors.accentViolet,
+  'Claude': AppColors.accentCoral,
+  'Groq': AppColors.accentCyan,
+};
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -17,109 +26,205 @@ class SettingsScreen extends StatelessWidget {
     final system = context.watch<SystemService>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings'), backgroundColor: Colors.transparent, iconTheme: const IconThemeData(color: AppColors.textPrimary)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      backgroundColor: AppColors.backgroundPrimary,
+      body: CenteredPage(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const PageHeader(eyebrow: 'Settings', title: 'Configure your assistant.'),
+            const SizedBox(height: 24),
+            _providersCard(context, registry),
+            const SizedBox(height: 14),
+            _shakeCard(context, shakeService),
+            const SizedBox(height: 14),
+            _startupCard(context, system),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _providersCard(BuildContext context, ProviderRegistry registry) {
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('AI Providers', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                const Text('Active provider used for screen analysis', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                const SizedBox(height: 8),
-                ...registry.providers.map(
-                  (p) => RadioListTile<String>(
-                    value: p.providerName,
-                    groupValue: registry.active.providerName,
-                    onChanged: (name) {
-                      if (name != null) registry.setActive(name);
-                    },
-                    activeColor: AppColors.accentViolet,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(p.providerName, style: const TextStyle(color: AppColors.textPrimary)),
-                    subtitle: Text(p.modelId, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+          const SectionLabel('AI Provider'),
+          ...registry.providers.map((p) => _providerRow(context, p, registry)),
+          const Divider(color: AppColors.glassBorder, height: 24),
+          Text('Model for ${registry.active.providerName}',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+          const SizedBox(height: 6),
+          _modelDropdown(context, registry),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const ProviderSetupScreen())),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: const [
+                  Expanded(
+                    child: Text('Manage API keys',
+                        style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14)),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text('Model for ${registry.active.providerName}',
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                DropdownButton<String>(
-                  isExpanded: true,
-                  value: registry.active.modelId,
-                  dropdownColor: AppColors.backgroundPrimary,
-                  style: const TextStyle(color: AppColors.textPrimary),
-                  underline: Container(height: 1, color: AppColors.glassBorder),
-                  items: registry.active.availableModels
-                      .map((m) => DropdownMenuItem(
-                            value: m,
-                            child: Text(m, overflow: TextOverflow.ellipsis),
-                          ))
-                      .toList(),
-                  onChanged: (m) {
-                    if (m != null) {
-                      context.read<ProviderRegistry>().setModel(registry.active, m);
-                    }
-                  },
-                ),
-                const Divider(color: AppColors.glassBorder),
-                ListTile(
-                  title: const Text('Manage API Keys', style: TextStyle(color: AppColors.textPrimary)),
-                  trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
-                  contentPadding: EdgeInsets.zero,
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ProviderSetupScreen()));
-                  },
-                ),
-              ],
+                  Icon(Icons.arrow_forward, color: AppColors.textMuted, size: 18),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          GlassCard(
+        ],
+      ),
+    );
+  }
+
+  Widget _providerRow(BuildContext context, AIProvider p, ProviderRegistry registry) {
+    final accent = _providerAccents[p.providerName] ?? AppColors.ink;
+    final isActive = registry.active.providerName == p.providerName;
+    return InkWell(
+      onTap: () => registry.setActive(p.providerName),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+        child: Row(
+          children: [
+            Container(
+              width: 10, height: 10,
+              decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(p.providerName,
+                      style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14)),
+                  Text(p.modelId,
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                ],
+              ),
+            ),
+            // Custom radio (dark, editorial)
+            Container(
+              width: 18, height: 18,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: isActive ? AppColors.ink : const Color(0xFFCFCABD),
+                    width: isActive ? 5 : 1.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modelDropdown(BuildContext context, ProviderRegistry registry) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0x22000000)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isExpanded: true,
+          value: registry.active.modelId,
+          dropdownColor: AppColors.glassSurface,
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+          icon: const Icon(Icons.expand_more, color: AppColors.textMuted, size: 18),
+          items: registry.active.availableModels
+              .map((m) => DropdownMenuItem(
+                    value: m,
+                    child: Text(m, overflow: TextOverflow.ellipsis),
+                  ))
+              .toList(),
+          onChanged: (m) {
+            if (m != null) context.read<ProviderRegistry>().setModel(registry.active, m);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _shakeCard(BuildContext context, ShakeDetectorService s) {
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionLabel('Shake sensitivity'),
+          SliderTheme(
+            data: SliderThemeData(
+              activeTrackColor: AppColors.ink,
+              inactiveTrackColor: const Color(0xFFE7E3DA),
+              thumbColor: AppColors.ink,
+              overlayColor: AppColors.ink.withValues(alpha: 0.1),
+              trackHeight: 4,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
+            ),
+            child: Slider(
+              value: s.sensitivity.index / 2.0,
+              onChanged: (v) => context
+                  .read<ShakeDetectorService>()
+                  .updateSensitivity(ShakeSensitivity.values[(v * 2).round()]),
+              divisions: 2,
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final l in const ['Low', 'Medium', 'High'])
+                Text(l,
+                    style: TextStyle(
+                      color: s.sensitivity.name.toLowerCase() == l.toLowerCase()
+                          ? AppColors.textPrimary
+                          : AppColors.textMuted,
+                      fontSize: 12,
+                      fontWeight: s.sensitivity.name.toLowerCase() == l.toLowerCase()
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    )),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _startupCard(BuildContext context, SystemService system) {
+    return GlassCard(
+      child: Row(
+        children: [
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Shake Sensitivity', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                Slider(
-                  value: shakeService.sensitivity.index / 2.0,
-                  onChanged: (val) {
-                    int idx = (val * 2).round();
-                    context.read<ShakeDetectorService>().updateSensitivity(ShakeSensitivity.values[idx]);
-                  },
-                  divisions: 2,
-                  activeColor: AppColors.accentViolet,
-                  inactiveColor: AppColors.glassBorder,
-                ),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Low', style: TextStyle(color: AppColors.textMuted)),
-                    Text('Medium', style: TextStyle(color: AppColors.textMuted)),
-                    Text('High', style: TextStyle(color: AppColors.textMuted)),
-                  ],
-                ),
+                Text('Launch at Windows startup',
+                    style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14)),
+                SizedBox(height: 2),
+                Text('Starts silently in the system tray',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Startup', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  value: system.launchAtStartup,
-                  onChanged: (v) => context.read<SystemService>().setLaunchAtStartup(v),
-                  activeColor: AppColors.accentViolet,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Launch Magisor at Windows startup', style: TextStyle(color: AppColors.textPrimary)),
-                  subtitle: const Text('Starts silently in the system tray when you sign in', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                ),
-              ],
-            ),
+          Switch(
+            value: system.launchAtStartup,
+            onChanged: (v) => context.read<SystemService>().setLaunchAtStartup(v),
+            activeThumbColor: AppColors.backgroundPrimary,
+            activeTrackColor: AppColors.ink,
+            inactiveThumbColor: AppColors.backgroundPrimary,
+            inactiveTrackColor: const Color(0xFFCFCABD),
           ),
         ],
       ),

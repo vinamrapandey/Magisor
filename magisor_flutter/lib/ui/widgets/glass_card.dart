@@ -1,7 +1,8 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
+/// A clean editorial card: white surface, hairline border, soft shadow,
+/// rounded corners. (Name kept as GlassCard for compatibility.)
 class GlassCard extends StatelessWidget {
   final Widget? child;
   final double? width;
@@ -20,32 +21,21 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final br = borderRadius ?? BorderRadius.circular(20);
-    return ClipRRect(
-      borderRadius: br,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          width: width,
-          height: height,
-          padding: padding ?? const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.glassSurface,
-            borderRadius: br,
-            border: Border.all(color: AppColors.glassBorder, width: 1.5),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0DFFFFFF),
-                blurRadius: 10,
-                spreadRadius: 2,
-              )
-            ],
-          ),
-          // Transparent Material so InkWell/ListTile ripples paint correctly
-          // on top of the glass surface (not hidden behind it).
-          child: Material(type: MaterialType.transparency, child: child),
-        ),
+    final br = borderRadius ?? BorderRadius.circular(16);
+    return Container(
+      width: width,
+      height: height,
+      padding: padding ?? const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.glassSurface,
+        borderRadius: br is BorderRadius ? br : BorderRadius.circular(16),
+        border: Border.all(color: AppColors.glassBorder, width: 1),
+        boxShadow: const [
+          BoxShadow(color: Color(0x14000000), blurRadius: 18, offset: Offset(0, 8)),
+        ],
       ),
+      // Transparent Material so InkWell/ListTile ripples paint correctly.
+      child: Material(type: MaterialType.transparency, child: child),
     );
   }
 }

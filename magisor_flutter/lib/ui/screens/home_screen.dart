@@ -17,6 +17,7 @@ import '../../core/services/ocr_service.dart';
 import '../../core/services/shake_detector_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/system_service.dart';
+import '../theme/app_colors.dart';
 import '../widgets/pie_menu.dart';
 import '../widgets/ai_result_overlay.dart';
 import '../widgets/ask_bar.dart';
@@ -716,13 +717,13 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
               centerPosition: _menuPosition!,
               onClose: _closeOverlay,
               items: [
-                PieMenuItem(icon: Icons.chat_bubble_outline, label: "Ask", onTap: _startAsk),
-                PieMenuItem(icon: Icons.crop_free, label: "Select", onTap: _startRegionSelect),
-                PieMenuItem(icon: Icons.auto_awesome, label: "Summarize", onTap: () => _handleAction("Summarize")),
-                PieMenuItem(icon: Icons.lightbulb_outline, label: "Explain", onTap: () => _handleAction("Explain")),
-                PieMenuItem(icon: Icons.translate, label: "Translate", onTap: () => _handleAction("Translate")),
-                PieMenuItem(icon: Icons.text_fields, label: "Select Text", onTap: _startTextSelect),
-                PieMenuItem(icon: Icons.close, label: "Close", onTap: () => _handleAction("Close")),
+                PieMenuItem(icon: Icons.chat_bubble_outline, label: "Ask", color: AppColors.accentViolet, onTap: _startAsk),
+                PieMenuItem(icon: Icons.crop_free, label: "Select", color: AppColors.accentCyan, onTap: _startRegionSelect),
+                PieMenuItem(icon: Icons.auto_awesome, label: "Summarize", color: AppColors.accentCoral, onTap: () => _handleAction("Summarize")),
+                PieMenuItem(icon: Icons.lightbulb_outline, label: "Explain", color: AppColors.accentPink, onTap: () => _handleAction("Explain")),
+                PieMenuItem(icon: Icons.translate, label: "Translate", color: AppColors.accentViolet, onTap: () => _handleAction("Translate")),
+                PieMenuItem(icon: Icons.text_fields, label: "Select Text", color: AppColors.accentAmber, onTap: _startTextSelect),
+                PieMenuItem(icon: Icons.close, label: "Close", color: AppColors.textMuted, onTap: () => _handleAction("Close")),
               ],
             ),
           if (_isAsking)
