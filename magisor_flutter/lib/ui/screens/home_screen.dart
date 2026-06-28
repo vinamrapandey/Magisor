@@ -83,16 +83,35 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
   Future<void> _initSystem() async {
     await windowManager.setPreventClose(true);
-    await trayManager.setIcon('assets/tray_icon.ico');
-    Menu menu = Menu(
+
+    // Build menu first so it's attached the moment the icon registers.
+    final menu = Menu(
       items: [
-        MenuItem(key: 'dashboard', label: 'Settings & History'),
+        MenuItem(key: 'dashboard', label: 'Open Magisor'),
+        MenuItem.separator(),
+        MenuItem(key: 'settings', label: 'Settings & History'),
         if (kDebugMode) MenuItem(key: 'test_overlay', label: 'Open Overlay (Test)'),
         MenuItem.separator(),
         MenuItem(key: 'exit', label: 'Exit Magisor'),
       ],
     );
-    await trayManager.setContextMenu(menu);
+
+    try {
+      await trayManager.setIcon('assets/tray_icon.ico');
+    } catch (e) {
+      debugPrint('TRAY: setIcon failed → tray will show a blank square. $e');
+    }
+    try {
+      await trayManager.setToolTip('Magisor — shake your mouse to summon');
+    } catch (e) {
+      debugPrint('TRAY: setToolTip failed: $e');
+    }
+    try {
+      await trayManager.setContextMenu(menu);
+    } catch (e) {
+      debugPrint('TRAY: setContextMenu failed → right-click will do nothing. $e');
+    }
+
     // Start silently in the system tray; the app lives in the background and
     // is summoned by shaking. Open Settings/History from the tray icon.
     await windowManager.hide();
@@ -105,12 +124,17 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
-    if (menuItem.key == 'dashboard') {
-      _switchToDashboard();
-    } else if (menuItem.key == 'test_overlay') {
-      _testOverlay();
-    } else if (menuItem.key == 'exit') {
-      windowManager.destroy();
+    switch (menuItem.key) {
+      case 'dashboard':
+      case 'settings':
+        _switchToDashboard();
+        break;
+      case 'test_overlay':
+        _testOverlay();
+        break;
+      case 'exit':
+        windowManager.destroy();
+        break;
     }
   }
 
