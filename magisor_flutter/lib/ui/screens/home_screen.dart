@@ -675,30 +675,46 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
   Widget _buildDashboard() {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        title: const Text('Magisor Dashboard'),
+        title: const Text(
+          'Magisor',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
         elevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.backgroundPrimary,
+        surfaceTintColor: AppColors.backgroundPrimary,
         actions: [
           if (kDebugMode)
             Padding(
-              padding: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.only(right: 12),
               child: TextButton.icon(
                 onPressed: _testOverlay,
-                icon: const Icon(Icons.bolt, size: 18),
-                label: const Text('Test Overlay'),
+                icon: const Icon(Icons.bolt, size: 16, color: AppColors.textMuted),
+                label: const Text('Test overlay',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ),
             ),
         ],
       ),
+      backgroundColor: AppColors.backgroundPrimary,
       body: Row(
         children: [
           NavigationRail(
             selectedIndex: _selectedTab,
             onDestinationSelected: (index) => setState(() => _selectedTab = index),
             labelType: NavigationRailLabelType.all,
-            backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
+            backgroundColor: AppColors.backgroundPrimary,
+            selectedIconTheme: const IconThemeData(color: AppColors.textPrimary),
+            unselectedIconTheme: const IconThemeData(color: AppColors.textMuted),
+            selectedLabelTextStyle: const TextStyle(
+                color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
+            unselectedLabelTextStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            indicatorColor: const Color(0xFFEAE6DD),
             destinations: const [
               NavigationRailDestination(
                 icon: Icon(Icons.settings),
@@ -714,7 +730,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
               ),
             ],
           ),
-          const VerticalDivider(thickness: 1, width: 1),
+          const VerticalDivider(
+              thickness: 1, width: 1, color: AppColors.glassBorder),
           Expanded(
             child: switch (_selectedTab) {
               0 => const SettingsScreen(),

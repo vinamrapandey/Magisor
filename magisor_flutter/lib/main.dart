@@ -16,6 +16,9 @@ void main() async {
   // Required before any windowManager.* call works (maximize/setBounds/center
   // silently no-op without it).
   await windowManager.ensureInitialized();
+  // Responsive safety net: don't let the user shrink the dashboard below the
+  // point where NavigationRail + a card can render legibly.
+  await windowManager.setMinimumSize(const Size(560, 480));
 
   try {
     await Firebase.initializeApp();

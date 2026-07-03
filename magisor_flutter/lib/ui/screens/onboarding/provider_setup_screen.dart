@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/provider_registry.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/editorial.dart';
 import '../../widgets/glass_card.dart';
 
 class ProviderSetupScreen extends StatefulWidget {
@@ -68,8 +69,9 @@ class _ProviderSetupScreenState extends State<ProviderSetupScreen> {
     switch (_status[provider] ?? _KeyStatus.idle) {
       case _KeyStatus.verifying:
         return const SizedBox(
-          height: 16, width: 16,
-          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentViolet),
+          height: 16,
+          width: 16,
+          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink),
         );
       case _KeyStatus.valid:
         return const Icon(Icons.check_circle, color: AppColors.successGreen, size: 18);
@@ -83,57 +85,96 @@ class _ProviderSetupScreenState extends State<ProviderSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Choose your AI'), backgroundColor: Colors.transparent),
-      body: Center(
-        child: SizedBox(
-          height: 340,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            scrollDirection: Axis.horizontal,
-            children: _controllers.keys.map((provider) {
-              final verifying = _status[provider] == _KeyStatus.verifying;
-              return Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: GlassCard(
-                  width: 300,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(provider, style: const TextStyle(fontSize: 24, color: AppColors.textPrimary)),
-                          const SizedBox(width: 8),
-                          _statusBadge(provider),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _controllers[provider],
-                        obscureText: true,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: InputDecoration(
-                          labelText: 'API Key',
-                          hintText: 'Paste key here...',
-                          labelStyle: const TextStyle(color: AppColors.textMuted),
-                          hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.5)),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: verifying
-                            ? null
-                            : () => _saveAndVerify(provider, _controllers[provider]!.text),
-                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentViolet),
-                        child: const Text('Save Key & Verify'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
+      backgroundColor: AppColors.backgroundPrimary,
+      appBar: AppBar(
+        title: const Text('API keys'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        titleTextStyle: const TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
         ),
+      ),
+      body: CenteredPage(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const PageHeader(eyebrow: 'Providers', title: 'Bring your own keys.'),
+            const SizedBox(height: 8),
+            const Text(
+              'Paste an API key for any provider you want to use. Keys stay on this device, encrypted in the OS secure store.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 24),
+            for (final entry in _controllers.entries) ...[
+              _providerKeyCard(entry.key),
+              const SizedBox(height: 14),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _providerKeyCard(String provider) {
+    final verifying = _status[provider] == _KeyStatus.verifying;
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                provider,
+                style: const TextStyle(
+                  fontSize: 18,
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 10),
+              _statusBadge(provider),
+            ],
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _controllers[provider],
+            obscureText: true,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Paste API key…',
+              hintStyle: const TextStyle(color: AppColors.textMuted),
+              filled: true,
+              fillColor: AppColors.surfaceAlt,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerRight,
+            child: InkButton(
+              label: verifying ? 'Verifying…' : 'Save & verify',
+              icon: verifying ? null : Icons.arrow_forward,
+              onPressed: verifying
+                  ? () {}
+                  : () => _saveAndVerify(provider, _controllers[provider]!.text),
+            ),
+          ),
+        ],
       ),
     );
   }
