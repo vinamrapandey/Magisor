@@ -12,6 +12,8 @@ class GroqProvider extends AIProvider {
   @override
   String get providerName => 'Groq';
 
+  // Vision-capable Groq-hosted models. First entry is the default.
+  // Llama 4 Scout is fast, Maverick is more capable.
   @override
   List<String> get availableModels => const [
         'meta-llama/llama-4-scout-17b-16e-instruct',

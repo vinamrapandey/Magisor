@@ -7,9 +7,16 @@ class GeminiProvider extends AIProvider {
   @override
   String get providerName => 'Gemini';
 
+  // All Gemini models below support vision (image + text input).
+  // First entry is the default. Ordered fastest -> most capable within families.
   @override
-  List<String> get availableModels =>
-      const ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
+  List<String> get availableModels => const [
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-8b',
+        'gemini-1.5-pro',
+      ];
 
   @override
   bool get supportsVision => true;
