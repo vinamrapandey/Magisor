@@ -1,21 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/models/saved_item.dart';
 import '../../core/services/storage_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/editorial.dart';
 import '../widgets/history_entry_card.dart';
 
-class HistoryScreen extends StatelessWidget {
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
+
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  List<SavedItem>? _searchResults;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query, StorageService storage) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = null;
+      });
+      return;
+    }
+    final results = await storage.searchLocal(query);
+    if (!mounted) return;
+    setState(() {
+      _searchResults = results;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final storage = context.watch<StorageService>();
-    final items = storage.history;
+    final allItems = storage.history;
+    final displayItems = _searchResults ?? allItems;
 
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      body: items.isEmpty
+      body: allItems.isEmpty
           ? const _EmptyState(
               icon: Icons.history,
               title: 'No history yet',
@@ -41,12 +71,65 @@ class HistoryScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+
+                  // Low-Power Local Search Bar (0 AI Credits / Instant BM25 Search)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.glassSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.glassBorder),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (q) => _onSearchChanged(q, storage),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                      decoration: InputDecoration(
+                        icon: const Icon(Icons.search, color: AppColors.textMuted, size: 20),
+                        hintText: 'Search history & OCR text offline (0 credits)...',
+                        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                        border: InputBorder.none,
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: AppColors.textMuted),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _onSearchChanged('', storage);
+                                },
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 20),
-                  ...items.map((item) => HistoryEntryCard(
-                        item: item,
-                        onToggleSaved: () => storage.toggleSaved(item),
-                        onDelete: () => storage.deleteEntry(item),
-                      )),
+
+                  if (displayItems.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Center(
+                        child: Text(
+                          'No local matches found for "${_searchController.text}".',
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+                        ),
+                      ),
+                    )
+                  else
+                    ...displayItems.map((item) => HistoryEntryCard(
+                          item: item,
+                          onToggleSaved: () {
+                            storage.toggleSaved(item);
+                            if (_searchController.text.isNotEmpty) {
+                              _onSearchChanged(_searchController.text, storage);
+                            }
+                          },
+                          onDelete: () {
+                            storage.deleteEntry(item);
+                            if (_searchController.text.isNotEmpty) {
+                              _onSearchChanged(_searchController.text, storage);
+                            }
+                          },
+                        )),
                 ],
               ),
             ),

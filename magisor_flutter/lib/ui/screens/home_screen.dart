@@ -624,7 +624,13 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
       final base64Img =
           (jpeg != null && jpeg.isNotEmpty) ? base64Encode(jpeg) : '';
 
-      final response = await aiProvider.analyzeScreen(base64Img, question);
+      // Local RAG Context Retrieval (0 AI Credits / Instant local disk search)
+      final ragContext = await storage.retrieveRAGContext(question);
+      final finalPrompt = ragContext != null
+          ? "Relevant Local History Context:\n$ragContext\n\nUser Question: $question"
+          : question;
+
+      final response = await aiProvider.analyzeScreen(base64Img, finalPrompt);
 
       final entry = await storage.addEntry(
         query: question,
