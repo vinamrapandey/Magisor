@@ -11,9 +11,14 @@ class ClaudeProvider extends AIProvider {
   @override
   String get providerName => 'Claude';
 
+  // Official Anthropic Claude models supporting vision.
   @override
-  List<String> get availableModels =>
-      const ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'];
+  List<String> get availableModels => const [
+        'claude-3-7-sonnet-20250219',
+        'claude-3-5-sonnet-20241022',
+        'claude-3-5-haiku-20241022',
+        'claude-3-opus-20240229',
+      ];
 
   @override
   bool get supportsVision => true;

@@ -15,10 +15,21 @@ class ShakeDetectorService extends ChangeNotifier {
   static const String _sensitivityKey = 'magisor_shake_sensitivity';
 
   bool _isListening = false;
+  bool get isListening => _isListening;
+  bool get isPaused => !_isListening;
   Function(double x, double y)? onShakeDetected;
 
   ShakeSensitivity _sensitivity = ShakeSensitivity.low;
   ShakeSensitivity get sensitivity => _sensitivity;
+
+  Future<void> togglePause() async {
+    if (_isListening) {
+      await stop();
+    } else {
+      await start();
+    }
+    notifyListeners();
+  }
 
   Future<void> start() async {
     if (_isListening) return;
@@ -34,6 +45,7 @@ class ShakeDetectorService extends ChangeNotifier {
     } catch (e) {
       debugPrint("Warning: Failed to start native mouse hook: $e");
     }
+    notifyListeners();
   }
 
   Future<void> stop() async {
@@ -45,6 +57,7 @@ class ShakeDetectorService extends ChangeNotifier {
     } catch (e) {
       debugPrint("Warning: Failed to stop native mouse hook: $e");
     }
+    notifyListeners();
   }
 
   Future<void> updateSensitivity(ShakeSensitivity newSensitivity) async {

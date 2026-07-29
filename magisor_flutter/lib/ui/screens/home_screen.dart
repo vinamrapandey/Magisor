@@ -1,9 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -23,6 +26,7 @@ import '../widgets/ai_result_overlay.dart';
 import '../widgets/ask_bar.dart';
 import '../widgets/region_selector.dart';
 import '../widgets/text_select_layer.dart';
+import '../widgets/sidebar_nav.dart';
 import 'settings/settings_screen.dart';
 import 'history_screen.dart';
 import 'saved_screen.dart';
@@ -81,37 +85,114 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     super.dispose();
   }
 
+  Future<String> _getTrayIconPath() async {
+    try {
+      final exeDir = path.dirname(Platform.resolvedExecutable);
+      final releaseIconPath = path.join(exeDir, 'data', 'flutter_assets', 'assets', 'tray_icon.ico');
+      if (File(releaseIconPath).existsSync()) {
+        return releaseIconPath;
+      }
+    } catch (_) {}
+
+    try {
+      final debugIconPath = path.join(Directory.current.path, 'assets', 'tray_icon.ico');
+      if (File(debugIconPath).existsSync()) {
+        return debugIconPath;
+      }
+    } catch (_) {}
+
+    try {
+      final nestedDebugIconPath = path.join(Directory.current.path, 'magisor_flutter', 'assets', 'tray_icon.ico');
+      if (File(nestedDebugIconPath).existsSync()) {
+        return nestedDebugIconPath;
+      }
+    } catch (_) {}
+
+    // Extract asset directly from Flutter rootBundle to disk
+    try {
+      final byteData = await rootBundle.load('assets/tray_icon.ico');
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(path.join(tempDir.path, 'magisor_tray_icon.ico'));
+      await tempFile.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+      return tempFile.path;
+    } catch (e) {
+      debugPrint('TRAY: Failed to extract icon asset: $e');
+    }
+
+    return 'assets/tray_icon.ico';
+  }
+
   Future<void> _initSystem() async {
     await windowManager.setPreventClose(true);
-    await trayManager.setIcon('assets/tray_icon.ico');
-    Menu menu = Menu(
+
+    try {
+      final iconPath = await _getTrayIconPath();
+      debugPrint('TRAY: Using icon path: $iconPath');
+      await trayManager.setIcon(iconPath);
+    } catch (e) {
+      debugPrint('TRAY: setIcon failed: $e');
+    }
+
+    try {
+      await trayManager.setToolTip('Magisor AI — Right click for menu');
+    } catch (e) {
+      debugPrint('TRAY: setToolTip failed: $e');
+    }
+
+    await _updateTrayMenu();
+
+    // Show the Settings Dashboard window on startup for local testing & access
+    await _switchToDashboard(tabIndex: 3);
+  }
+
+  Future<void> _updateTrayMenu() async {
+    final isPaused = context.read<ShakeDetectorService>().isPaused;
+    final menu = Menu(
       items: [
-        MenuItem(key: 'dashboard', label: 'Settings & History'),
-        if (kDebugMode) MenuItem(key: 'test_overlay', label: 'Open Overlay (Test)'),
+        MenuItem(key: 'settings', label: 'Settings'),
         MenuItem.separator(),
-        MenuItem(key: 'exit', label: 'Exit Magisor'),
+        MenuItem(key: 'pause', label: isPaused ? 'Resume' : 'Pause'),
+        MenuItem(key: 'quit', label: 'Quit'),
       ],
     );
-    await trayManager.setContextMenu(menu);
-    // Start silently in the system tray; the app lives in the background and
-    // is summoned by shaking. Open Settings/History from the tray icon.
-    await windowManager.hide();
+
+    try {
+      await trayManager.setContextMenu(menu);
+    } catch (e) {
+      debugPrint('TRAY: setContextMenu failed: $e');
+    }
   }
 
   @override
   void onTrayIconMouseDown() {
-    _switchToDashboard();
+    // Intentionally no action on left click as requested
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    trayManager.popUpContextMenu();
   }
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
-    if (menuItem.key == 'dashboard') {
-      _switchToDashboard();
-    } else if (menuItem.key == 'test_overlay') {
-      _testOverlay();
-    } else if (menuItem.key == 'exit') {
-      windowManager.destroy();
+    switch (menuItem.key) {
+      case 'settings':
+        _switchToDashboard(tabIndex: 3);
+        break;
+      case 'pause':
+        _togglePause();
+        break;
+      case 'quit':
+        windowManager.destroy();
+        break;
     }
+  }
+
+  Future<void> _togglePause() async {
+    final shakeService = context.read<ShakeDetectorService>();
+    await shakeService.togglePause();
+    await _updateTrayMenu();
+    setState(() {});
   }
 
   @override
@@ -122,13 +203,11 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     }
   }
 
-  Future<void> _switchToDashboard() async {
+  Future<void> _switchToDashboard({int tabIndex = 3}) async {
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
     await windowManager.setHasShadow(true);
     await windowManager.setAlwaysOnTop(false);
-    await windowManager.setSize(const Size(900, 700));
-    // Show before center(): center() reads the window bounds, which return
-    // null (and crash) when the window is still hidden.
+    await windowManager.setSize(const Size(1000, 720));
     await windowManager.show();
     await windowManager.focus();
     try {
@@ -136,6 +215,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
     } catch (_) {}
 
     setState(() {
+      _selectedTab = tabIndex;
       _currentMode = AppMode.dashboard;
       _menuPosition = null;
       _result = null;
@@ -651,52 +731,216 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
 
   Widget _buildDashboard() {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: AppBar(
-        title: const Text('Magisor Dashboard'),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        actions: [
-          if (kDebugMode)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: TextButton.icon(
-                onPressed: _testOverlay,
-                icon: const Icon(Icons.bolt, size: 18),
-                label: const Text('Test Overlay'),
-              ),
-            ),
-        ],
-      ),
+      backgroundColor: AppColors.backgroundPrimary,
       body: Row(
         children: [
-          NavigationRail(
+          SidebarNav(
             selectedIndex: _selectedTab,
-            onDestinationSelected: (index) => setState(() => _selectedTab = index),
-            labelType: NavigationRailLabelType.all,
-            backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.settings),
-                label: Text('Settings'),
+            onItemSelected: (index) => setState(() => _selectedTab = index),
+          ),
+          Expanded(
+            child: switch (_selectedTab) {
+              0 => _buildOverviewTab(),
+              1 => const HistoryScreen(),
+              2 => const SavedScreen(),
+              3 => const SettingsScreen(),
+              _ => _buildHelpCenterTab(),
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewTab() {
+    final registry = context.watch<ProviderRegistry>();
+    final shakeService = context.watch<ShakeDetectorService>();
+    final isPaused = shakeService.isPaused;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Overview',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'System status and quick controls for Magisor AI assistant.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.glassSurface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.glassBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Active Provider',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        registry.active.providerName,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        registry.active.modelId,
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              NavigationRailDestination(
-                icon: Icon(Icons.history),
-                label: Text('History'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.bookmark_border),
-                label: Text('Saved'),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.glassSurface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.glassBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Mouse Shake Detector',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: isPaused ? AppColors.errorRed : AppColors.successGreen,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isPaused ? 'Paused' : 'Active',
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Sensitivity: ${shakeService.sensitivity.name.toUpperCase()}',
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(
-            child: switch (_selectedTab) {
-              0 => const SettingsScreen(),
-              1 => const HistoryScreen(),
-              _ => const SavedScreen(),
-            },
+          const SizedBox(height: 24),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.glassSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.glassBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'How to invoke Magisor',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '1. Shake your mouse back and forth anywhere on your screen.\n'
+                  '2. The glassmorphism Pie Menu will appear attached to your cursor.\n'
+                  '3. Select an option: Ask, Circle to Search, Summarize, Explain, Translate, or Select Text.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.6),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHelpCenterTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Help Center',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Learn how to use Magisor features and keyboard/gesture shortcuts.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.glassSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.glassBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'Feature Guide',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 12),
+                Text('• Circle to Search: Select "Select" from the pie menu and drag over any screen region.'),
+                SizedBox(height: 6),
+                Text('• Universal OCR: Select "Select Text" to drag and highlight text from images or video.'),
+                SizedBox(height: 6),
+                Text('• System Tray: Right click the hidden tray icon to access Settings, Pause, or Quit.'),
+              ],
+            ),
           ),
         ],
       ),
