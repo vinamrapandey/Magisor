@@ -11,7 +11,6 @@ class GeminiProvider extends AIProvider {
   // First entry is the default. Ordered fastest -> most capable within families.
   @override
   List<String> get availableModels => const [
-        'gemini-2.5-flash',
         'gemini-2.0-flash',
         'gemini-2.0-flash-lite',
         'gemini-1.5-flash',

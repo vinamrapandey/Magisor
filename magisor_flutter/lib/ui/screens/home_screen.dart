@@ -954,59 +954,67 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener, TrayListen
   }
 
   Widget _buildOverlay() {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          if (_frozenImage != null)
-            Positioned.fill(
-              child: RawImage(image: _frozenImage, fit: BoxFit.fill),
-            ),
-          if (_menuPosition != null)
-            PieMenu(
-              centerPosition: _menuPosition!,
-              onClose: _closeOverlay,
-              items: [
-                PieMenuItem(icon: Icons.chat_bubble_outline, label: "Ask", color: AppColors.accentViolet, onTap: _startAsk),
-                PieMenuItem(icon: Icons.crop_free, label: "Select", color: AppColors.accentCyan, onTap: _startRegionSelect),
-                PieMenuItem(icon: Icons.auto_awesome, label: "Summarize", color: AppColors.accentCoral, onTap: () => _handleAction("Summarize")),
-                PieMenuItem(icon: Icons.lightbulb_outline, label: "Explain", color: AppColors.accentPink, onTap: () => _handleAction("Explain")),
-                PieMenuItem(icon: Icons.translate, label: "Translate", color: AppColors.accentViolet, onTap: () => _handleAction("Translate")),
-                PieMenuItem(icon: Icons.text_fields, label: "Select Text", color: AppColors.accentAmber, onTap: _startTextSelect),
-                PieMenuItem(icon: Icons.close, label: "Close", color: AppColors.textMuted, onTap: () => _handleAction("Close")),
-              ],
-            ),
-          if (_isAsking)
-            AskBar(
-              onSubmit: _submitQuestion,
-              onCancel: _closeOverlay,
-            ),
-          if (_isSelecting)
-            Positioned.fill(
-              child: RegionSelector(
-                onSelected: _onRegionSelected,
-                onCancel: _closeOverlay,
-              ),
-            ),
-          if (_isTextSelecting)
-            Positioned.fill(
-              child: TextSelectLayer(
-                words: _wordBoxesLogical(MediaQuery.of(context).size),
-                onAction: _onTextAction,
-                onCancel: _closeOverlay,
-              ),
-            ),
-          if (_isLoading || _result != null)
-            AIResultOverlay(
-              isLoading: _isLoading,
-              result: _result,
-              onClose: _closeOverlay,
-              onFollowUp: _handleAction,
-              isSaved: _currentEntry?.saved ?? false,
-              onToggleSaved: _currentEntry != null ? _toggleCurrentSaved : null,
-              onAskFollowUp: _lastCaptureBase64 != null ? _followUp : null,
-            ),
-        ],
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _closeOverlay,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              if (_frozenImage != null)
+                Positioned.fill(
+                  child: RawImage(image: _frozenImage, fit: BoxFit.fill),
+                ),
+              if (_menuPosition != null)
+                PieMenu(
+                  centerPosition: _menuPosition!,
+                  onClose: _closeOverlay,
+                  items: [
+                    PieMenuItem(icon: Icons.chat_bubble_outline, label: "Ask", color: AppColors.accentViolet, onTap: _startAsk),
+                    PieMenuItem(icon: Icons.crop_free, label: "Select", color: AppColors.accentCyan, onTap: _startRegionSelect),
+                    PieMenuItem(icon: Icons.auto_awesome, label: "Summarize", color: AppColors.accentCoral, onTap: () => _handleAction("Summarize")),
+                    PieMenuItem(icon: Icons.lightbulb_outline, label: "Explain", color: AppColors.accentPink, onTap: () => _handleAction("Explain")),
+                    PieMenuItem(icon: Icons.translate, label: "Translate", color: AppColors.accentViolet, onTap: () => _handleAction("Translate")),
+                    PieMenuItem(icon: Icons.text_fields, label: "Select Text", color: AppColors.accentAmber, onTap: _startTextSelect),
+                    PieMenuItem(icon: Icons.close, label: "Close", color: AppColors.textMuted, onTap: () => _handleAction("Close")),
+                  ],
+                ),
+              if (_isAsking)
+                AskBar(
+                  onSubmit: _submitQuestion,
+                  onCancel: _closeOverlay,
+                ),
+              if (_isSelecting)
+                Positioned.fill(
+                  child: RegionSelector(
+                    onSelected: _onRegionSelected,
+                    onCancel: _closeOverlay,
+                  ),
+                ),
+              if (_isTextSelecting)
+                Positioned.fill(
+                  child: TextSelectLayer(
+                    words: _wordBoxesLogical(MediaQuery.of(context).size),
+                    onAction: _onTextAction,
+                    onCancel: _closeOverlay,
+                  ),
+                ),
+              if (_isLoading || _result != null)
+                AIResultOverlay(
+                  isLoading: _isLoading,
+                  result: _result,
+                  onClose: _closeOverlay,
+                  onFollowUp: _handleAction,
+                  isSaved: _currentEntry?.saved ?? false,
+                  onToggleSaved: _currentEntry != null ? _toggleCurrentSaved : null,
+                  onAskFollowUp: _lastCaptureBase64 != null ? _followUp : null,
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
