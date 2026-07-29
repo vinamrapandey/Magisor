@@ -11,14 +11,13 @@ class ClaudeProvider extends AIProvider {
   @override
   String get providerName => 'Claude';
 
-  // All Claude models below support vision. First entry is the default.
-  // Ordered by tier: Opus (most capable) -> Sonnet (balanced) -> Haiku (fast).
+  // Official Anthropic Claude models supporting vision.
   @override
   List<String> get availableModels => const [
-        'claude-opus-4-8',
-        'claude-opus-4-7',
-        'claude-sonnet-4-6',
-        'claude-haiku-4-5',
+        'claude-3-7-sonnet-20250219',
+        'claude-3-5-sonnet-20241022',
+        'claude-3-5-haiku-20241022',
+        'claude-3-opus-20240229',
       ];
 
   @override
