@@ -15,11 +15,8 @@ class GroqProvider extends AIProvider {
   // Official Groq Cloud models supporting vision & text completions.
   @override
   List<String> get availableModels => const [
-        'llama-3.3-70b-versatile',
         'llama-3.2-11b-vision-preview',
         'llama-3.2-90b-vision-preview',
-        'llama-3.1-8b-instant',
-        'mixtral-8x7b-32768',
       ];
 
   @override
@@ -89,7 +86,14 @@ class GroqProvider extends AIProvider {
       body: jsonEncode(body),
     );
     if (res.statusCode != 200) {
-      throw Exception('API Error: ${res.statusCode} ${res.body}');
+      String msg = res.body;
+      try {
+        final errJson = jsonDecode(res.body);
+        if (errJson['error']?['message'] != null) {
+          msg = errJson['error']['message'];
+        }
+      } catch (_) {}
+      throw Exception('Groq API Error (${res.statusCode}): $msg');
     }
     return _parse(res.body);
   }

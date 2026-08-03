@@ -14,10 +14,10 @@ class ClaudeProvider extends AIProvider {
   // Official Anthropic Claude models supporting vision.
   @override
   List<String> get availableModels => const [
-        'claude-3-7-sonnet-20250219',
-        'claude-3-5-sonnet-20241022',
-        'claude-3-5-haiku-20241022',
+        'claude-3-5-sonnet-20240620',
         'claude-3-opus-20240229',
+        'claude-3-sonnet-20240229',
+        'claude-3-haiku-20240307',
       ];
 
   @override
@@ -81,62 +81,106 @@ class ClaudeProvider extends AIProvider {
   @override
   Future<MagisorResponse> analyzeScreen(String base64Image, String prompt) async {
     final key = await _getApiKey();
-    final body = {
-      'model': modelId,
-      'max_tokens': 4096,
-      'system': systemPrompt,
-      'messages': [
-        {
-          'role': 'user',
-          'content': [
-            {'type': 'text', 'text': prompt},
-            {
-              'type': 'image',
-              'source': {
-                'type': 'base64',
-                'media_type': 'image/jpeg',
-                'data': base64Image,
-              }
-            }
-          ]
-        }
-      ]
-    };
+    final modelsToTry = [modelId, ...availableModels.where((m) => m != modelId)];
+    String lastErrorMsg = '';
 
-    final res = await http.post(
-      Uri.parse('$_baseUrl/messages'),
-      headers: _headers(key),
-      body: jsonEncode(body),
-    );
-    if (res.statusCode != 200) {
-      throw Exception('API Error: ${res.statusCode} ${res.body}');
+    for (final currentModel in modelsToTry) {
+      final body = {
+        'model': currentModel,
+        'max_tokens': 4096,
+        'system': systemPrompt,
+        'messages': [
+          {
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': prompt},
+              {
+                'type': 'image',
+                'source': {
+                  'type': 'base64',
+                  'media_type': 'image/jpeg',
+                  'data': base64Image,
+                }
+              }
+            ]
+          }
+        ]
+      };
+
+      final res = await http.post(
+        Uri.parse('$_baseUrl/messages'),
+        headers: _headers(key),
+        body: jsonEncode(body),
+      );
+
+      if (res.statusCode == 200) {
+        return _parse(res.body);
+      }
+
+      String msg = res.body;
+      try {
+        final errJson = jsonDecode(res.body);
+        if (errJson['error']?['message'] != null) {
+          msg = errJson['error']['message'];
+        }
+      } catch (_) {}
+
+      if (res.statusCode == 404 || res.body.contains('not_found_error')) {
+        lastErrorMsg = msg;
+        continue;
+      }
+
+      throw Exception('Claude API Error (${res.statusCode}): $msg');
     }
-    return _parse(res.body);
+
+    throw Exception('Claude API Error (404): No models accessible for this API key. Details: $lastErrorMsg');
   }
 
   @override
   Future<MagisorResponse> analyzeText(String text, String prompt) async {
     final key = await _getApiKey();
-    final body = {
-      'model': modelId,
-      'max_tokens': 4096,
-      'system': systemPrompt,
-      'messages': [
-        {
-          'role': 'user',
-          'content': '$prompt\n\nContext:\n$text',
-        }
-      ]
-    };
+    final modelsToTry = [modelId, ...availableModels.where((m) => m != modelId)];
+    String lastErrorMsg = '';
 
-    final res = await http.post(
-      Uri.parse('$_baseUrl/messages'),
-      headers: _headers(key),
-      body: jsonEncode(body),
-    );
-    if (res.statusCode != 200) {
-      throw Exception('API Error: ${res.statusCode} ${res.body}');
+    for (final currentModel in modelsToTry) {
+      final body = {
+        'model': currentModel,
+        'max_tokens': 4096,
+        'system': systemPrompt,
+        'messages': [
+          {
+            'role': 'user',
+            'content': '$prompt\n\nContext:\n$text',
+          }
+        ]
+      };
+
+      final res = await http.post(
+        Uri.parse('$_baseUrl/messages'),
+        headers: _headers(key),
+        body: jsonEncode(body),
+      );
+
+      if (res.statusCode == 200) {
+        return _parse(res.body);
+      }
+
+      String msg = res.body;
+      try {
+        final errJson = jsonDecode(res.body);
+        if (errJson['error']?['message'] != null) {
+          msg = errJson['error']['message'];
+        }
+      } catch (_) {}
+
+      if (res.statusCode == 404 || res.body.contains('not_found_error')) {
+        lastErrorMsg = msg;
+        continue;
+      }
+
+      throw Exception('Claude API Error (${res.statusCode}): $msg');
     }
-    return _parse(res.body);
+
+    throw Exception('Claude API Error (404): No models accessible for this API key. Details: $lastErrorMsg');
   }
 }
