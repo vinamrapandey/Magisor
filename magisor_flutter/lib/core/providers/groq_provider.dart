@@ -13,10 +13,13 @@ class GroqProvider extends AIProvider {
   String get providerName => 'Groq';
 
   // Official Groq Cloud models supporting vision & text completions.
+  // First entry is the default (vision-capable for screen analysis).
   @override
   List<String> get availableModels => const [
         'llama-3.2-11b-vision-preview',
         'llama-3.2-90b-vision-preview',
+        'llama-3.1-8b-instant',
+        'llama-3.3-70b-versatile',
       ];
 
   @override

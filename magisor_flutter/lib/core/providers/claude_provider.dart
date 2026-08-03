@@ -12,11 +12,12 @@ class ClaudeProvider extends AIProvider {
   String get providerName => 'Claude';
 
   // Official Anthropic Claude models supporting vision.
+  // First entry is the default. Fallbacks are tried automatically on 404.
   @override
   List<String> get availableModels => const [
+        'claude-sonnet-4-6',
         'claude-3-5-sonnet-20240620',
         'claude-3-opus-20240229',
-        'claude-3-sonnet-20240229',
         'claude-3-haiku-20240307',
       ];
 

@@ -91,6 +91,21 @@ To package into an installer:
 & 'C:\Program Files (x86)\NSIS\makensis.exe' flutter_installer.nsi
 ```
 
+
+## 🔧 Environment Variables
+
+Magisor supports optional `.env` configuration to override default AI model selections. Copy `.env.example` to `.env` in the project root:
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `GEMINI_MODEL` | `gemini-2.0-flash` | Google Gemini model used for screen analysis |
+| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Anthropic Claude model used for screen analysis |
+| `GROQ_MODEL` | `llama-3.2-11b-vision-preview` | Groq model used for screen analysis |
+| `MAGISOR_ENV` | `development` | Runtime environment (`development` / `production`) |
+| `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+
+> **Note**: API keys are stored securely in the Windows Credential Store via the in-app Settings UI — they are **not** set via `.env`.
+
 ---
 
 ## 📄 License
