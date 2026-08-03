@@ -27,6 +27,20 @@ class _ProviderSetupScreenState extends State<ProviderSetupScreen> {
     // that actually exist.
     final names = context.read<ProviderRegistry>().providers.map((p) => p.providerName);
     _controllers = {for (final name in names) name: TextEditingController()};
+    _loadExistingKeys();
+  }
+
+  Future<void> _loadExistingKeys() async {
+    final registry = context.read<ProviderRegistry>();
+    for (final p in registry.providers) {
+      final key = await p.loadKey();
+      if (key != null && key.isNotEmpty && mounted) {
+        _controllers[p.providerName]?.text = key;
+        setState(() {
+          _status[p.providerName] = _KeyStatus.valid;
+        });
+      }
+    }
   }
 
   @override

@@ -12,7 +12,6 @@ class GeminiProvider extends AIProvider {
   @override
   List<String> get availableModels => const [
         'gemini-2.0-flash',
-        'gemini-2.0-flash-lite',
         'gemini-1.5-flash',
         'gemini-1.5-pro',
       ];
@@ -60,7 +59,16 @@ class GeminiProvider extends AIProvider {
     };
 
     final res = await http.post(url, headers: {'Content-Type': 'application/json'}, body: jsonEncode(body));
-    if (res.statusCode != 200) throw Exception('API Error: ${res.statusCode}');
+    if (res.statusCode != 200) {
+      String msg = res.body;
+      try {
+        final errJson = jsonDecode(res.body);
+        if (errJson['error']?['message'] != null) {
+          msg = errJson['error']['message'];
+        }
+      } catch (_) {}
+      throw Exception('Gemini API Error (${res.statusCode}): $msg');
+    }
 
     final data = jsonDecode(res.body);
     final textResponse = data['candidates'][0]['content']['parts'][0]['text'] as String;
@@ -86,7 +94,16 @@ class GeminiProvider extends AIProvider {
     };
 
     final res = await http.post(url, headers: {'Content-Type': 'application/json'}, body: jsonEncode(body));
-    if (res.statusCode != 200) throw Exception('API Error: ${res.statusCode}');
+    if (res.statusCode != 200) {
+      String msg = res.body;
+      try {
+        final errJson = jsonDecode(res.body);
+        if (errJson['error']?['message'] != null) {
+          msg = errJson['error']['message'];
+        }
+      } catch (_) {}
+      throw Exception('Gemini API Error (${res.statusCode}): $msg');
+    }
 
     final data = jsonDecode(res.body);
     final textResponse = data['candidates'][0]['content']['parts'][0]['text'] as String;
