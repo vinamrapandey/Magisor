@@ -9,7 +9,6 @@
 [![Version](https://img.shields.io/badge/version-1.6.5-blue.svg)](pubspec.yaml)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://www.microsoft.com/windows)
 [![UI](https://img.shields.io/badge/UI-Flutter%203-02569B.svg)](https://flutter.dev/)
-[![AI Providers](https://img.shields.io/badge/AI-Gemini%20%7C%20Claude%20%7C%20Groq-orange.svg)](#-multi-provider-ai)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 </div>
@@ -37,68 +36,6 @@ Magisor features a **low-power Local RAG (Retrieval-Augmented Generation)** engi
 
 ---
 
-## 📸 Media & Interface Tour
-
-<div align="center">
-
-### Glassmorphic Radial Pie Menu
-![Pie Menu Overlay](screenshots/00_hero_pie_menu.png)
-
-### Settings & Provider Management Dashboard
-![Settings Dashboard](screenshots/01_dashboard_settings.png)
-
-### Circle to Search & Region Analysis
-![Circle to Search](screenshots/03_circle_to_search.png)
-
-### Universal On-Screen Text Selection & OCR
-![Text Select Layer](screenshots/02_text_select.png)
-
-### Zero-Cost Local Search & History Tab
-![History Search](screenshots/04_history.png)
-
-### Natural Ask Bar & Multimodal Follow-ups
-![Ask Bar Flow](screenshots/06_ask_flow.png)
-
-</div>
-
----
-
-## 🏗️ Architecture
-
-Magisor combines a high-performance **Flutter 3** desktop UI with a C++ native runner layer on Windows:
-
-```
-                                 ┌───────────────────────────────┐
-                                 │     Win32 Mouse Shake Hook    │
-                                 │      (C++ WH_MOUSE_LL)        │
-                                 └───────────────┬───────────────┘
-                                                 │
-                                                 ▼
-                                     [Radial Pie Menu / Overlay]
-                                                 │
-                                                 ▼
-                                   ┌───────────────────────────┐
-                                   │   Capture & OCR Engine    │
-                                   │  (C++ BitBlt / WinRT OCR) │
-                                   └─────────────┬─────────────┘
-                                                 │
-                        ┌────────────────────────┴────────────────────────┐
-                        ▼                                                 ▼
-            [Local SQLite FTS5 Index]                         [Multi-Provider AI]
-            (%APPDATA%/Magisor/rag.db)                     (Gemini / Claude / Groq)
-            (0 Credits / Instant RAG)                     (Vision / Text Summaries)
-```
-
-| Layer | Technologies & Frameworks |
-| :--- | :--- |
-| **UI & State** | Flutter 3.12, Dart 3, `provider`, Glassmorphism CSS design system |
-| **Native Runner** | Win32 C++ runner (`windows/runner/`), GDI BitBlt screen capture, global WH_MOUSE_LL hook |
-| **Local RAG & DB** | SQLite FTS5, `sqflite_common_ffi`, BM25 relevance ranking |
-| **AI Providers** | Google Gemini API (`v1beta`), Anthropic Messages API, Groq OpenAI-compatible API |
-| **Security** | Windows Credential Store via `flutter_secure_storage` |
-
----
-
 ## 🚀 Getting Started
 
 ### Installation (Pre-built Binary)
@@ -110,6 +47,20 @@ Magisor combines a high-performance **Flutter 3** desktop UI with a C++ native r
    - **Anthropic Claude**: [Anthropic Console](https://console.anthropic.com/)
    - **Groq**: [Groq Console](https://console.groq.com/)
 4. Shake your mouse back and forth to open the radial pie menu!
+
+---
+
+## 🏗️ Architecture
+
+Magisor combines a high-performance **Flutter 3** desktop UI with a C++ native runner layer on Windows:
+
+| Layer | Technologies & Frameworks |
+| :--- | :--- |
+| **UI & State** | Flutter 3.12, Dart 3, `provider`, Glassmorphism CSS design system |
+| **Native Runner** | Win32 C++ runner (`windows/runner/`), GDI BitBlt screen capture, global WH_MOUSE_LL hook |
+| **Local RAG & DB** | SQLite FTS5, `sqflite_common_ffi`, BM25 relevance ranking |
+| **AI Providers** | Google Gemini API (`v1beta`), Anthropic Messages API, Groq OpenAI-compatible API |
+| **Security** | Windows Credential Store via `flutter_secure_storage` |
 
 ---
 
